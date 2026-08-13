@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { CountrySwitcher, useCountry } from "@/lib/country";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -18,15 +19,9 @@ type Result = {
   disclaimer: string;
 };
 
-function naira(n: number) {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency",
-    currency: "NGN",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
-
 export default function CalculatorPage() {
+  const { money, country } = useCountry();
+  const currencyHint = country?.currency_code || "local currency";
   const [propertyPrice, setPropertyPrice] = useState(35000000);
   const [deposit, setDeposit] = useState(3500000);
   const [rate, setRate] = useState(9.75);
@@ -75,9 +70,12 @@ export default function CalculatorPage() {
         <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold">
           Home<span className="text-leaf">Gauge</span>
         </Link>
-        <Link href="/register" className="text-sm font-semibold text-leaf">
-          Check eligibility
-        </Link>
+        <div className="flex items-center gap-4">
+          <CountrySwitcher />
+          <Link href="/register" className="text-sm font-semibold text-leaf">
+            Check eligibility
+          </Link>
+        </div>
       </header>
 
       <main className="mx-auto grid max-w-5xl gap-8 px-5 pb-20 md:grid-cols-2">
@@ -88,13 +86,13 @@ export default function CalculatorPage() {
           </p>
 
           <div className="mt-8 space-y-4">
-            <Field label="Property price (₦)" value={propertyPrice} onChange={setPropertyPrice} />
-            <Field label="Your deposit / equity (₦)" value={deposit} onChange={setDeposit} />
-            <p className="text-sm text-muted">Estimated loan: <strong className="text-ink">{naira(loanPreview)}</strong></p>
+            <Field label={`Property price (${currencyHint})`} value={propertyPrice} onChange={setPropertyPrice} />
+            <Field label={`Your deposit / equity (${currencyHint})`} value={deposit} onChange={setDeposit} />
+            <p className="text-sm text-muted">Estimated loan: <strong className="text-ink">{money(loanPreview)}</strong></p>
             <Field label="Interest rate (% per year)" value={rate} onChange={setRate} step={0.25} />
             <Field label="Years to repay (tenor)" value={tenor} onChange={setTenor} step={1} />
-            <Field label="Monthly take-home pay (₦)" value={income} onChange={setIncome} />
-            <Field label="Other monthly debt payments (₦)" value={debt} onChange={setDebt} />
+            <Field label={`Monthly take-home pay (${currencyHint})`} value={income} onChange={setIncome} />
+            <Field label={`Other monthly debt payments (${currencyHint})`} value={debt} onChange={setDebt} />
             <button
               type="button"
               onClick={calculate}
@@ -112,13 +110,13 @@ export default function CalculatorPage() {
           {!result && <p className="mt-4 text-sm text-muted">Run the calculator to see monthly repayment, total interest, and how much of your income the payment would use.</p>}
           {result && (
             <dl className="mt-6 space-y-4 text-sm">
-              <Row label="Estimated monthly repayment" value={naira(result.monthly_repayment)} />
-              <Row label="Total you would repay" value={naira(result.total_repayment)} />
-              <Row label="Total interest" value={naira(result.total_interest)} />
+              <Row label="Estimated monthly repayment" value={money(result.monthly_repayment)} />
+              <Row label="Total you would repay" value={money(result.total_repayment)} />
+              <Row label="Total interest" value={money(result.total_interest)} />
               <Row label="Loan as % of property price (LTV)" value={`${result.loan_to_value_pct}%`} />
               <Row label="Payment as % of income (ITI)" value={`${result.installment_to_income_pct}%`} />
               <Row label="Debts + mortgage vs income (DTI)" value={`${result.debt_to_income_pct}%`} />
-              <Row label="Equity / deposit in this scenario" value={`${naira(result.required_equity)} (${result.required_equity_pct}%)`} />
+              <Row label="Equity / deposit in this scenario" value={`${money(result.required_equity)} (${result.required_equity_pct}%)`} />
               <p className="pt-4 text-xs leading-relaxed text-muted">{result.disclaimer}</p>
             </dl>
           )}

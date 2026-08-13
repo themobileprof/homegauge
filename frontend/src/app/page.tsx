@@ -1,13 +1,14 @@
 import Link from "next/link";
+import { CountrySwitcher } from "@/lib/country";
 
 const steps = [
   {
     title: "Share your salary picture",
-    body: "Tell us about your job and upload 6 months of salary account statements showing a clear monthly credit.",
+    body: "Tell us about your job and upload about 6 months of salary account statements showing a clear monthly credit.",
   },
   {
     title: "See what you may qualify for",
-    body: "We compare your profile to real Nigerian mortgage products — NHF, MREIF, and commercial options — without pretending a bank has approved you.",
+    body: "We compare your profile to mortgage products in your selected market — without pretending a bank has approved you.",
   },
   {
     title: "Prepare documents & get help",
@@ -26,7 +27,7 @@ const faqs = [
   },
   {
     q: "What is equity contribution?",
-    a: "The part of the home price you pay yourself (your deposit). Many Nigerian products ask for about 10–30%.",
+    a: "The part of the home price you pay yourself (your deposit). Many mortgage products ask for about 10–30%, depending on the market and lender.",
   },
   {
     q: "Are the rates on HomeGauge final?",
@@ -37,7 +38,7 @@ const faqs = [
 export default function HomePage() {
   return (
     <div className="min-h-screen text-ink">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-5 md:px-8">
+      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-5 md:px-8">
         <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight">
           Home<span className="text-leaf">Gauge</span>
         </Link>
@@ -48,6 +49,7 @@ export default function HomePage() {
           <Link href="/learn">Learn</Link>
         </nav>
         <div className="flex items-center gap-3">
+          <CountrySwitcher className="hidden sm:inline-flex" />
           <Link href="/login" className="hidden text-sm font-semibold text-ink-soft sm:inline">
             Sign in
           </Link>
@@ -70,7 +72,7 @@ export default function HomePage() {
               Understand your mortgage. Know what you may qualify for. Get help getting approved.
             </h1>
             <p className="mt-5 max-w-lg text-base leading-relaxed text-muted md:text-lg">
-              Built for Nigerians who earn a salary and want a clear path to home finance — without property-listing noise or false “you’re approved” promises.
+              Built for salaried homebuyers who want a clear path to home finance — without property-listing noise or false “you’re approved” promises. Pick your market and start with products available there.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
@@ -95,11 +97,11 @@ export default function HomePage() {
             <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(196,163,90,0.35),transparent_70%)]" />
             <p className="text-sm uppercase tracking-[0.18em] text-gold">Salary-account review</p>
             <p className="mt-4 font-[family-name:var(--font-display)] text-3xl font-semibold leading-tight">
-              6 clear salary credits. One account. Honest next steps.
+              Clear salary credits. One account. Honest next steps.
             </p>
             <ul className="mt-8 space-y-4 text-sm leading-relaxed text-paper/90">
-              <li className="flex gap-3"><span className="text-gold">01</span> We look for a repeating credit near month-end.</li>
-              <li className="flex gap-3"><span className="text-gold">02</span> We match you to products like NHF and MREIF.</li>
+              <li className="flex gap-3"><span className="text-gold">01</span> We look for a repeating credit near payday.</li>
+              <li className="flex gap-3"><span className="text-gold">02</span> We match you to products in your selected country.</li>
               <li className="flex gap-3"><span className="text-gold">03</span> An advisor can review anything that needs a human eye.</li>
             </ul>
           </div>
@@ -132,7 +134,7 @@ export default function HomePage() {
               </h2>
             </div>
             <p className="text-muted leading-relaxed">
-              Nigerian mortgage terms move with policy and lender appetite. We surface fees, equity needs, and verification dates — and we keep humans available when automation is not enough.
+              Mortgage terms move with policy and lender appetite in every market. We surface fees, equity needs, and verification dates — and we keep humans available when automation is not enough.
             </p>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
@@ -154,7 +156,7 @@ export default function HomePage() {
             <div>
               <h2 className="font-[family-name:var(--font-display)] text-3xl font-semibold">Try the affordability calculator</h2>
               <p className="mt-3 max-w-xl text-sm text-paper/75">
-                Change price, deposit, rate, and tenor. See estimated monthly repayments in ₦ — clearly marked as estimates.
+                Change price, deposit, rate, and tenor. See estimated monthly repayments in your market currency — clearly marked as estimates.
               </p>
             </div>
             <Link href="/calculator" className="rounded-md bg-gold px-5 py-3 text-sm font-semibold text-ink hover:brightness-105">
@@ -178,28 +180,10 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 pb-24 md:px-8">
-          <div className="rounded-2xl border border-[color:var(--line)] bg-white/70 px-6 py-10 text-center md:px-12">
-            <h2 className="font-[family-name:var(--font-display)] text-3xl font-semibold">Ready to see where you stand?</h2>
-            <p className="mx-auto mt-3 max-w-xl text-muted">
-              Start with eligibility. Compare options. Prepare your papers. HomeGauge stays with you through the journey.
-            </p>
-            <Link
-              href="/register"
-              className="mt-8 inline-flex rounded-md bg-leaf px-5 py-3 text-sm font-semibold text-white hover:bg-leaf-deep"
-            >
-              Check My Mortgage Eligibility
-            </Link>
-          </div>
-        </section>
+        <footer className="border-t border-[color:var(--line)] py-10 text-center text-sm text-muted">
+          HomeGauge is not a bank or lender. Educational estimates only.
+        </footer>
       </main>
-
-      <footer className="border-t border-[color:var(--line)] px-5 py-10 text-sm text-muted md:px-8">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <p className="font-[family-name:var(--font-display)] text-lg text-ink">HomeGauge</p>
-          <p>Not a bank or lender. Mortgage information should be verified with the relevant institution.</p>
-        </div>
-      </footer>
     </div>
   );
 }

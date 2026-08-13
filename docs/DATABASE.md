@@ -23,4 +23,4 @@ users, user_profiles, employment_profiles, financial_profiles, auth_tokens, lend
 go run ./cmd/seed
 ```
 
-Seeds document types, platform settings, disclaimers, admin/advisor/demo users, and Nigeria mortgage products (NHF, Stanbic MREIF, commercial indicative).
+Seeds document types, platform settings, disclaimers, admin/advisor/demo users, countries (NG active; GH/KE coming soon), and Nigeria mortgage products (NHF, Stanbic MREIF, commercial indicative).

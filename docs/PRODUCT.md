@@ -2,7 +2,7 @@
 
 ## Positioning
 
-HomeGauge helps Nigerians understand mortgage options, estimate affordability, assess likely eligibility (salary-account based), prepare documents, and get guided help through the application process.
+HomeGauge helps people understand mortgage options in their market, estimate affordability, assess likely eligibility (salary-account based), prepare documents, and get guided help through the application process.
 
 **Not a bank. Not a lender. Not a property marketplace (V2).**
 
@@ -16,14 +16,14 @@ Secondary CTA: **Compare Mortgage Options**
 | Area | Decision |
 |------|----------|
 | Brand | HomeGauge |
-| Market | Nigeria first |
+| Markets | Multi-country ready; **Nigeria active** first; other countries via `countries` + product seeds (`coming_soon` stubs for GH/KE) |
 | Underwriting basis | Salary account only: recognizable recurring salary credit for **6 consecutive months** |
 | Employment in eligibility engine | Salaried / civil servant (salary credit). Others: learn + calculator only |
 | Salary variance tolerance | ±15% of median credit (admin-configurable) |
 | Payday window | Last 7 calendar days of each month (admin-configurable) |
 | Accounts | Single salary domicile account for automated review |
-| Currency | NGN only |
-| Default ITI guardrail | 35% unless product rule overrides |
+| Currency | Per-country (`countries.currency_code`); UI formats from selected market |
+| Default ITI guardrail | 35% unless product/country rule overrides |
 | Interest estimate | Reducing-balance monthly; always labelled estimate |
 | AI runtime | **Anthropic Claude** for statement extraction + concierge drafts |
 | Workflow orchestration | **n8n** for email/escalation webhooks (not core underwriting) |
@@ -32,7 +32,7 @@ Secondary CTA: **Compare Mortgage Options**
 | Infra | No Docker; native local + managed cloud services |
 | Auth | Email/password, verification, reset; cookie sessions |
 | Roles | CUSTOMER, ADVISOR, ADMIN, LENDER_USER |
-| Seed products | NHF (scheme), Stanbic MREIF (lender-published), commercial indicative (`needs_verification`) |
+| Seed products (NG) | NHF (scheme), Stanbic MREIF (lender-published), commercial indicative (`needs_verification`) |
 | Approval language | Never claim bank approval from automated assessment |
 
 ## Admin-configurable (CRUD)
