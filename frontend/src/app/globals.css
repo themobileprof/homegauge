@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #0c1f17;
+  --ink-soft: #24352c;
+  --paper: #f3f6f1;
+  --paper-2: #e7eee6;
+  --leaf: #1f6b45;
+  --leaf-deep: #145234;
+  --gold: #c4a35a;
+  --muted: #5c6b62;
+  --line: rgba(12, 31, 23, 0.12);
+  --danger: #9b2c2c;
+  --background: var(--paper);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-leaf: var(--leaf);
+  --color-leaf-deep: var(--leaf-deep);
+  --color-gold: var(--gold);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(31, 107, 69, 0.14), transparent 60%),
+    radial-gradient(900px 420px at 90% 0%, rgba(196, 163, 90, 0.16), transparent 55%),
+    linear-gradient(180deg, #f7faf6 0%, var(--paper) 40%, #eef3ec 100%);
+  font-family: var(--font-body), "Segoe UI", sans-serif;
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(31, 107, 69, 0.2);
+}
