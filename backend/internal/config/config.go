@@ -10,29 +10,33 @@ import (
 )
 
 type Config struct {
-	AppEnv              string
-	AppURL              string
-	APIAddr             string
-	DatabaseURL         string
-	RedisURL            string
-	SessionSecret       string
-	SessionTTL          time.Duration
-	CORSOrigins         []string
-	SMTPFrom            string
-	MailerMode          string
-	AnthropicAPIKey     string
-	AnthropicModel      string
-	N8NWebhookURL       string
-	S3Endpoint          string
-	S3Region            string
-	S3Bucket            string
-	S3AccessKey         string
-	S3SecretKey         string
-	S3UsePathStyle      bool
-	AutomationLevel     string
-	SalaryVariancePct   float64
+	AppEnv               string
+	AppURL               string
+	APIAddr              string
+	DatabaseURL          string
+	RedisURL             string
+	SessionSecret        string
+	SessionTTL           time.Duration
+	CORSOrigins          []string
+	SMTPFrom             string
+	MailerMode           string
+	AnthropicAPIKey      string
+	AnthropicModel       string
+	GeminiAPIKey         string
+	GeminiModel          string
+	DeepSeekAPIKey       string
+	DeepSeekModel        string
+	N8NWebhookURL        string
+	S3Endpoint           string
+	S3Region             string
+	S3Bucket             string
+	S3AccessKey          string
+	S3SecretKey          string
+	S3UsePathStyle       bool
+	AutomationLevel      string
+	SalaryVariancePct    float64
 	SalaryPaydayLastDays int
-	DefaultITIPct       float64
+	DefaultITIPct        float64
 }
 
 func Load() (Config, error) {
@@ -52,6 +56,10 @@ func Load() (Config, error) {
 		MailerMode:           getenv("MAILER_MODE", "log"),
 		AnthropicAPIKey:      os.Getenv("ANTHROPIC_API_KEY"),
 		AnthropicModel:       getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+		GeminiAPIKey:         firstEnv("GEMINI_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"),
+		GeminiModel:          getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+		DeepSeekAPIKey:       os.Getenv("DEEPSEEK_API_KEY"),
+		DeepSeekModel:        getenv("DEEPSEEK_MODEL", "deepseek-chat"),
 		N8NWebhookURL:        os.Getenv("N8N_WEBHOOK_URL"),
 		S3Endpoint:           getenv("S3_ENDPOINT", ""),
 		S3Region:             getenv("S3_REGION", "auto"),
@@ -72,6 +80,15 @@ func getenv(k, def string) string {
 		return v
 	}
 	return def
+}
+
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func intEnv(k string, def int) int {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/homegauge/homegauge/backend/internal/applications"
+	"github.com/homegauge/homegauge/backend/internal/ai"
 	"github.com/homegauge/homegauge/backend/internal/auth"
 	"github.com/homegauge/homegauge/backend/internal/calculator"
 	"github.com/homegauge/homegauge/backend/internal/config"
@@ -73,7 +74,13 @@ func main() {
 	eligHandler := eligibility.NewHandler(eligSvc)
 	docSvc := documents.NewService(sqlDB, store)
 	docHandler := documents.NewHandler(docSvc)
-	appSvc := applications.NewService(sqlDB)
+	aiClient := ai.NewClient(
+		cfg.AnthropicAPIKey, cfg.AnthropicModel,
+		cfg.GeminiAPIKey, cfg.GeminiModel,
+		cfg.DeepSeekAPIKey, cfg.DeepSeekModel,
+	)
+	slog.Info("ai providers configured", "providers", aiClient.ConfiguredProviders())
+	appSvc := applications.NewService(sqlDB, aiClient)
 	appHandler := applications.NewHandler(appSvc)
 
 	if cfg.AppEnv == "production" {
@@ -108,6 +115,16 @@ func main() {
 	admin := api.Group("/admin", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdmin))
 	admin.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "scope": "admin"})
+	})
+	admin.GET("/ai-status", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"providers": aiClient.ConfiguredProviders(),
+			"models": gin.H{
+				"anthropic": cfg.AnthropicModel,
+				"gemini":    cfg.GeminiModel,
+				"deepseek":  cfg.DeepSeekModel,
+			},
+		})
 	})
 
 	advisor := api.Group("/advisor", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdvisor, auth.RoleAdmin))

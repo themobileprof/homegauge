@@ -7,7 +7,7 @@ Mortgage enablement platform — understand options in your market, check salary
 - `frontend/` — Next.js + TypeScript + Tailwind
 - `backend/` — Go (Gin) modular monolith
 - PostgreSQL + Redis
-- Claude (AI concierge) + optional n8n webhooks
+- Claude / Gemini / DeepSeek (AI concierge drafts; at least one key) + optional n8n webhooks
 - No Docker required
 
 ## Prerequisites

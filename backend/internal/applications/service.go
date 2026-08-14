@@ -5,9 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/homegauge/homegauge/backend/internal/ai"
 )
 
 var (
@@ -17,26 +21,26 @@ var (
 )
 
 type Application struct {
-	ID                uuid.UUID  `json:"id"`
-	UserID            uuid.UUID  `json:"user_id"`
-	CustomerEmail     string     `json:"customer_email,omitempty"`
-	CustomerName      string     `json:"customer_name,omitempty"`
-	AssessmentID      *uuid.UUID `json:"assessment_id,omitempty"`
+	ID                 uuid.UUID  `json:"id"`
+	UserID             uuid.UUID  `json:"user_id"`
+	CustomerEmail      string     `json:"customer_email,omitempty"`
+	CustomerName       string     `json:"customer_name,omitempty"`
+	AssessmentID       *uuid.UUID `json:"assessment_id,omitempty"`
 	PreferredProductID *uuid.UUID `json:"preferred_product_id,omitempty"`
-	Status            string     `json:"status"`
-	AssignedAdvisorID *uuid.UUID `json:"assigned_advisor_id,omitempty"`
-	NextActionText    string     `json:"next_action_text"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	Status             string     `json:"status"`
+	AssignedAdvisorID  *uuid.UUID `json:"assigned_advisor_id,omitempty"`
+	NextActionText     string     `json:"next_action_text"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 type Note struct {
-	ID         uuid.UUID `json:"id"`
-	AuthorID   uuid.UUID `json:"author_id"`
-	AuthorEmail string   `json:"author_email,omitempty"`
-	Body       string    `json:"body"`
-	Visibility string    `json:"visibility"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID          uuid.UUID `json:"id"`
+	AuthorID    uuid.UUID `json:"author_id"`
+	AuthorEmail string    `json:"author_email,omitempty"`
+	Body        string    `json:"body"`
+	Visibility  string    `json:"visibility"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Suggestion struct {
@@ -50,9 +54,12 @@ type Suggestion struct {
 
 type Service struct {
 	db *sql.DB
+	ai *ai.Client
 }
 
-func NewService(db *sql.DB) *Service { return &Service{db: db} }
+func NewService(db *sql.DB, aiClient *ai.Client) *Service {
+	return &Service{db: db, ai: aiClient}
+}
 
 func (s *Service) GetMine(ctx context.Context, userID uuid.UUID) (*Application, error) {
 	row := s.db.QueryRowContext(ctx, `
@@ -91,13 +98,118 @@ func (s *Service) RequestAdvisor(ctx context.Context, userID uuid.UUID) (*Applic
 		INSERT INTO application_events (application_id, actor_id, event_type, payload)
 		VALUES ($1, $2, 'advisor_requested', '{"source":"customer"}')
 	`, app.ID, userID)
-	// Create a concierge suggestion for human review
-	payload := []byte(`{"message":"Customer requested human assistance. Review eligibility results and document checklist.","actions":["review_documents","message_customer"]}`)
-	_, _ = s.db.ExecContext(ctx, `
-		INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
-		VALUES ($1, 'request_human_review', $2::jsonb, 0.9, 'pending')
-	`, app.ID, string(payload))
+
+	if err := s.createAISuggestions(ctx, app); err != nil {
+		slog.Warn("ai concierge draft failed; using fallback suggestion", "err", err, "application_id", app.ID)
+		payload := []byte(`{"message":"Customer requested human assistance. Review eligibility results and document checklist.","actions":["review_documents","message_customer"],"priority":"medium"}`)
+		_, _ = s.db.ExecContext(ctx, `
+			INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
+			VALUES ($1, 'request_human_review', $2::jsonb, 0.5, 'pending')
+		`, app.ID, string(payload))
+	}
 	return s.GetByID(ctx, app.ID)
+}
+
+func (s *Service) createAISuggestions(ctx context.Context, app *Application) error {
+	if s.ai == nil || len(s.ai.ConfiguredProviders()) == 0 {
+		return ai.ErrNoProvider
+	}
+	brief, err := s.buildCaseBrief(ctx, app)
+	if err != nil {
+		return err
+	}
+	review, err := s.ai.DraftAdvisorReview(ctx, brief)
+	if err != nil {
+		return err
+	}
+
+	primaryPayload, _ := json.Marshal(review.Primary)
+	conf := 0.75
+	if len(review.Reviews) > 0 {
+		conf = 0.85
+	}
+	_, err = s.db.ExecContext(ctx, `
+		INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
+		VALUES ($1, 'ai_advisor_draft', $2::jsonb, $3, 'pending')
+	`, app.ID, string(primaryPayload), conf)
+	if err != nil {
+		return err
+	}
+
+	if len(review.Reviews) > 0 {
+		multi, _ := json.Marshal(map[string]any{
+			"providers": review.Providers,
+			"reviews":   review.Reviews,
+			"note":      "Secondary model drafts for advisor comparison. Suggest-only — do not auto-apply.",
+		})
+		_, _ = s.db.ExecContext(ctx, `
+			INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
+			VALUES ($1, 'ai_multi_model_review', $2::jsonb, 0.7, 'pending')
+		`, app.ID, string(multi))
+	}
+	return nil
+}
+
+func (s *Service) buildCaseBrief(ctx context.Context, app *Application) (string, error) {
+	var email, name string
+	_ = s.db.QueryRowContext(ctx, `
+		SELECT u.email, COALESCE(p.full_name,'')
+		FROM users u LEFT JOIN user_profiles p ON p.user_id = u.id
+		WHERE u.id = $1
+	`, app.UserID).Scan(&email, &name)
+
+	var snapshot []byte
+	var readiness sql.NullInt64
+	var bestWhy sql.NullString
+	if app.AssessmentID != nil {
+		_ = s.db.QueryRowContext(ctx, `
+			SELECT a.input_snapshot,
+				(SELECT total_score FROM readiness_scores r WHERE r.assessment_id = a.id ORDER BY created_at DESC LIMIT 1),
+				(SELECT explanation FROM eligibility_results er
+				 WHERE er.assessment_id = a.id
+				 ORDER BY CASE er.outcome
+				   WHEN 'likely_eligible' THEN 1
+				   WHEN 'potentially_eligible' THEN 2
+				   ELSE 9 END
+				 LIMIT 1)
+			FROM eligibility_assessments a WHERE a.id = $1
+		`, *app.AssessmentID).Scan(&snapshot, &readiness, &bestWhy)
+	}
+
+	var docs []string
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT document_type_code, status FROM documents
+		WHERE application_id = $1
+		ORDER BY uploaded_at DESC LIMIT 20
+	`, app.ID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var code, status string
+			if rows.Scan(&code, &status) == nil {
+				docs = append(docs, fmt.Sprintf("%s=%s", code, status))
+			}
+		}
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Application ID: %s\nStatus: %s\nCustomer: %s <%s>\nNext action on file: %s\n",
+		app.ID, app.Status, name, email, app.NextActionText)
+	if readiness.Valid {
+		fmt.Fprintf(&b, "Readiness score: %d\n", readiness.Int64)
+	}
+	if bestWhy.Valid && bestWhy.String != "" {
+		fmt.Fprintf(&b, "Top eligibility note: %s\n", bestWhy.String)
+	}
+	if len(snapshot) > 0 {
+		fmt.Fprintf(&b, "Assessment input snapshot JSON: %s\n", string(snapshot))
+	}
+	if len(docs) > 0 {
+		fmt.Fprintf(&b, "Documents: %s\n", strings.Join(docs, ", "))
+	} else {
+		b.WriteString("Documents: none uploaded yet\n")
+	}
+	return b.String(), nil
 }
 
 func (s *Service) ListCases(ctx context.Context) ([]Application, error) {
