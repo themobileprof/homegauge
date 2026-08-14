@@ -6,12 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/homegauge/homegauge/backend/internal/ai"
 )
 
 var (
@@ -54,12 +52,9 @@ type Suggestion struct {
 
 type Service struct {
 	db *sql.DB
-	ai *ai.Client
 }
 
-func NewService(db *sql.DB, aiClient *ai.Client) *Service {
-	return &Service{db: db, ai: aiClient}
-}
+func NewService(db *sql.DB) *Service { return &Service{db: db} }
 
 func (s *Service) GetMine(ctx context.Context, userID uuid.UUID) (*Application, error) {
 	row := s.db.QueryRowContext(ctx, `
@@ -99,98 +94,263 @@ func (s *Service) RequestAdvisor(ctx context.Context, userID uuid.UUID) (*Applic
 		VALUES ($1, $2, 'advisor_requested', '{"source":"customer"}')
 	`, app.ID, userID)
 
-	if err := s.createAISuggestions(ctx, app); err != nil {
-		slog.Warn("ai concierge draft failed; using fallback suggestion", "err", err, "application_id", app.ID)
-		payload := []byte(`{"message":"Customer requested human assistance. Review eligibility results and document checklist.","actions":["review_documents","message_customer"],"priority":"medium"}`)
-		_, _ = s.db.ExecContext(ctx, `
-			INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
-			VALUES ($1, 'request_human_review', $2::jsonb, 0.5, 'pending')
-		`, app.ID, string(payload))
-	}
+	_ = s.createProgrammaticSuggestions(ctx, app)
 	return s.GetByID(ctx, app.ID)
 }
 
-func (s *Service) createAISuggestions(ctx context.Context, app *Application) error {
-	if s.ai == nil || len(s.ai.ConfiguredProviders()) == 0 {
-		return ai.ErrNoProvider
-	}
-	brief, err := s.buildCaseBrief(ctx, app)
+// createProgrammaticSuggestions builds advisor next steps from DB facts — no LLM.
+func (s *Service) createProgrammaticSuggestions(ctx context.Context, app *Application) error {
+	facts, err := s.loadCaseFacts(ctx, app)
 	if err != nil {
 		return err
 	}
-	draft, err := s.ai.DraftAdvisorReview(ctx, brief)
-	if err != nil {
-		return err
-	}
-
-	primaryPayload, _ := json.Marshal(draft)
+	draft := buildAdvisorDraft(facts)
+	payload, _ := json.Marshal(draft)
+	conf := 0.95
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
-		VALUES ($1, 'ai_advisor_draft', $2::jsonb, 0.8, 'pending')
-	`, app.ID, string(primaryPayload))
+		VALUES ($1, 'advisor_checklist', $2::jsonb, $3, 'pending')
+	`, app.ID, string(payload), conf)
 	return err
 }
 
-func (s *Service) buildCaseBrief(ctx context.Context, app *Application) (string, error) {
-	var email, name string
-	_ = s.db.QueryRowContext(ctx, `
-		SELECT u.email, COALESCE(p.full_name,'')
-		FROM users u LEFT JOIN user_profiles p ON p.user_id = u.id
-		WHERE u.id = $1
-	`, app.UserID).Scan(&email, &name)
+type caseFacts struct {
+	CustomerName   string
+	Readiness      *int
+	Likely         int
+	Potential      int
+	Unlikely       int
+	MissingDocs    []string
+	UploadedDocs   []string
+	RejectedDocs   []string
+	HasAssessment  bool
+	SalaryMonths   int
+	EquityPct      *float64
+}
 
-	var snapshot []byte
-	var readiness sql.NullInt64
-	var bestWhy sql.NullString
-	if app.AssessmentID != nil {
-		_ = s.db.QueryRowContext(ctx, `
-			SELECT a.input_snapshot,
-				(SELECT total_score FROM readiness_scores r WHERE r.assessment_id = a.id ORDER BY created_at DESC LIMIT 1),
-				(SELECT explanation FROM eligibility_results er
-				 WHERE er.assessment_id = a.id
-				 ORDER BY CASE er.outcome
-				   WHEN 'likely_eligible' THEN 1
-				   WHEN 'potentially_eligible' THEN 2
-				   ELSE 9 END
-				 LIMIT 1)
-			FROM eligibility_assessments a WHERE a.id = $1
-		`, *app.AssessmentID).Scan(&snapshot, &readiness, &bestWhy)
+type advisorDraft struct {
+	Message   string   `json:"message"`
+	Actions   []string `json:"actions"`
+	Priority  string   `json:"priority"`
+	Rationale string   `json:"rationale"`
+	Source    string   `json:"source"`
+}
+
+func (s *Service) loadCaseFacts(ctx context.Context, app *Application) (caseFacts, error) {
+	f := caseFacts{CustomerName: app.CustomerName}
+	if f.CustomerName == "" {
+		_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(full_name,'') FROM user_profiles WHERE user_id=$1`, app.UserID).Scan(&f.CustomerName)
 	}
 
-	var docs []string
+	if app.AssessmentID != nil {
+		f.HasAssessment = true
+		var score sql.NullInt64
+		_ = s.db.QueryRowContext(ctx, `
+			SELECT total_score FROM readiness_scores WHERE assessment_id=$1 ORDER BY created_at DESC LIMIT 1
+		`, *app.AssessmentID).Scan(&score)
+		if score.Valid {
+			v := int(score.Int64)
+			f.Readiness = &v
+		}
+		rows, err := s.db.QueryContext(ctx, `
+			SELECT outcome FROM eligibility_results WHERE assessment_id=$1
+		`, *app.AssessmentID)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var o string
+				if rows.Scan(&o) == nil {
+					switch o {
+					case "likely_eligible":
+						f.Likely++
+					case "potentially_eligible", "may_require_review":
+						f.Potential++
+					case "unlikely", "more_info_required":
+						f.Unlikely++
+					}
+				}
+			}
+		}
+		var snap []byte
+		_ = s.db.QueryRowContext(ctx, `SELECT input_snapshot FROM eligibility_assessments WHERE id=$1`, *app.AssessmentID).Scan(&snap)
+		if len(snap) > 0 {
+			var in struct {
+				SalaryMonths         int     `json:"salary_months"`
+				AvailableDeposit     float64 `json:"available_deposit"`
+				DesiredPropertyPrice float64 `json:"desired_property_price"`
+			}
+			if json.Unmarshal(snap, &in) == nil {
+				f.SalaryMonths = in.SalaryMonths
+				if in.DesiredPropertyPrice > 0 {
+					pct := (in.AvailableDeposit / in.DesiredPropertyPrice) * 100
+					f.EquityPct = &pct
+				}
+			}
+		}
+	}
+
+	// Required docs for linked / any active product checklist style: types on application uploads + common required set.
+	uploaded := map[string]string{}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT document_type_code, status FROM documents
-		WHERE application_id = $1
-		ORDER BY uploaded_at DESC LIMIT 20
+		SELECT document_type_code, status FROM documents WHERE application_id=$1
 	`, app.ID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
 			var code, status string
 			if rows.Scan(&code, &status) == nil {
-				docs = append(docs, fmt.Sprintf("%s=%s", code, status))
+				uploaded[code] = status
+				if status == "rejected" || status == "requires_replacement" {
+					f.RejectedDocs = append(f.RejectedDocs, code)
+				} else if status == "uploaded" || status == "under_review" || status == "accepted" {
+					f.UploadedDocs = append(f.UploadedDocs, code)
+				}
 			}
 		}
 	}
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "Application ID: %s\nStatus: %s\nCustomer: %s <%s>\nNext action on file: %s\n",
-		app.ID, app.Status, name, email, app.NextActionText)
-	if readiness.Valid {
-		fmt.Fprintf(&b, "Readiness score: %d\n", readiness.Int64)
+	required := []string{"salary_statements_6m", "valid_id", "payslips_3m", "employment_letter"}
+	// Prefer product-linked requirements when assessment exists
+	if app.AssessmentID != nil {
+		prows, perr := s.db.QueryContext(ctx, `
+			SELECT DISTINCT mpd.document_type_code
+			FROM eligibility_results er
+			JOIN mortgage_product_documents mpd ON mpd.product_id = er.product_id
+			WHERE er.assessment_id = $1 AND mpd.required = TRUE
+		`, *app.AssessmentID)
+		if perr == nil {
+			defer prows.Close()
+			var codes []string
+			for prows.Next() {
+				var code string
+				if prows.Scan(&code) == nil {
+					codes = append(codes, code)
+				}
+			}
+			if len(codes) > 0 {
+				required = codes
+			}
+		}
 	}
-	if bestWhy.Valid && bestWhy.String != "" {
-		fmt.Fprintf(&b, "Top eligibility note: %s\n", bestWhy.String)
+	for _, code := range required {
+		st, ok := uploaded[code]
+		if !ok || st == "not_started" || st == "rejected" || st == "requires_replacement" {
+			f.MissingDocs = append(f.MissingDocs, code)
+		}
 	}
-	if len(snapshot) > 0 {
-		fmt.Fprintf(&b, "Assessment input snapshot JSON: %s\n", string(snapshot))
-	}
-	if len(docs) > 0 {
-		fmt.Fprintf(&b, "Documents: %s\n", strings.Join(docs, ", "))
+	return f, nil
+}
+
+func buildAdvisorDraft(f caseFacts) advisorDraft {
+	actions := []string{"message_customer"}
+	var parts []string
+	priority := "medium"
+
+	if !f.HasAssessment {
+		parts = append(parts, "No completed eligibility assessment yet — ask the customer to finish Check Eligibility.")
+		actions = append(actions, "request_assessment")
+		priority = "high"
 	} else {
-		b.WriteString("Documents: none uploaded yet\n")
+		if f.Readiness != nil {
+			parts = append(parts, fmt.Sprintf("Readiness score is %d/100.", *f.Readiness))
+			if *f.Readiness < 55 {
+				priority = "high"
+			}
+		}
+		parts = append(parts, fmt.Sprintf("Product fit: %d likely, %d needs review, %d unlikely.", f.Likely, f.Potential, f.Unlikely))
+		if f.Likely == 0 && f.Potential == 0 {
+			priority = "high"
+			actions = append(actions, "review_eligibility_inputs")
+			parts = append(parts, "No strong product matches — verify income, deposit, and tenor before escalating.")
+		} else {
+			actions = append(actions, "confirm_best_fit_product")
+		}
+		if f.SalaryMonths > 0 && f.SalaryMonths < 6 {
+			priority = "high"
+			parts = append(parts, fmt.Sprintf("Only %d salary months declared (target ~6).", f.SalaryMonths))
+			actions = append(actions, "verify_salary_pattern")
+		}
+		if f.EquityPct != nil && *f.EquityPct < 10 {
+			parts = append(parts, fmt.Sprintf("Declared equity is about %.0f%% — many products need ~10%%+.", *f.EquityPct))
+			actions = append(actions, "discuss_deposit_gap")
+		}
 	}
-	return b.String(), nil
+
+	if len(f.MissingDocs) > 0 {
+		if priority != "high" {
+			priority = "medium"
+		}
+		parts = append(parts, "Missing or incomplete documents: "+strings.Join(humanizeDocCodes(f.MissingDocs), ", ")+".")
+		actions = append(actions, "chase_missing_documents")
+		for _, code := range f.MissingDocs {
+			if code == "salary_statements_6m" {
+				actions = append(actions, "collect_salary_statements")
+				break
+			}
+		}
+	} else if len(f.UploadedDocs) > 0 {
+		parts = append(parts, "Core documents are on file — review uploads and mark accept/reject.")
+		actions = append(actions, "review_uploaded_documents")
+	} else {
+		parts = append(parts, "No documents uploaded yet.")
+		actions = append(actions, "chase_missing_documents")
+		priority = "high"
+	}
+	if len(f.RejectedDocs) > 0 {
+		priority = "high"
+		parts = append(parts, "Some documents need replacement: "+strings.Join(humanizeDocCodes(f.RejectedDocs), ", ")+".")
+		actions = append(actions, "request_document_replacements")
+	}
+
+	name := f.CustomerName
+	if name == "" {
+		name = "Customer"
+	}
+	msg := fmt.Sprintf("%s requested advisor help. %s", name, strings.Join(parts, " "))
+	actions = uniqueStrings(actions)
+
+	return advisorDraft{
+		Message:   msg,
+		Actions:   actions,
+		Priority:  priority,
+		Rationale: "Generated from assessment outcomes, readiness score, and document checklist — not an LLM.",
+		Source:    "rules",
+	}
+}
+
+func humanizeDocCodes(codes []string) []string {
+	labels := map[string]string{
+		"salary_statements_6m": "6-month salary statements",
+		"valid_id":             "valid ID",
+		"payslips_3m":          "3 months’ payslips",
+		"employment_letter":    "employment letter",
+		"nhf_evidence":         "NHF evidence",
+		"offer_letter":         "property offer letter",
+		"title_docs":           "title documents",
+		"passport_photo":       "passport photo",
+	}
+	out := make([]string, 0, len(codes))
+	for _, c := range codes {
+		if l, ok := labels[c]; ok {
+			out = append(out, l)
+		} else {
+			out = append(out, strings.ReplaceAll(c, "_", " "))
+		}
+	}
+	return out
+}
+
+func uniqueStrings(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	return out
 }
 
 func (s *Service) ListCases(ctx context.Context) ([]Application, error) {

@@ -3,65 +3,72 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 )
 
-type ConciergeDraft struct {
-	Message     string   `json:"message"`
-	Actions     []string `json:"actions"`
-	Priority    string   `json:"priority"`
-	Rationale   string   `json:"rationale,omitempty"`
-	Provider    string   `json:"provider,omitempty"`
-	Model       string   `json:"model,omitempty"`
-	RawFallback string   `json:"raw_fallback,omitempty"`
+// DocumentExtraction is the only AI-shaped job we plan to use by default:
+// unstructured bank statements / uploads. Eligibility, affordability, readiness,
+// and advisor checklists stay programmatic.
+
+type SalaryCredit struct {
+	Date        string  `json:"date"`
+	Amount      float64 `json:"amount"`
+	Description string  `json:"description,omitempty"`
 }
 
-const conciergeSystem = `You are HomeGauge's mortgage concierge assistant for salaried applicants.
-HomeGauge is NOT a bank and must never claim a loan is approved.
-Return practical next steps for a human advisor reviewing a case.
-Keep language plain and cautious.`
+type SalaryExtraction struct {
+	MonthsFound   int           `json:"months_found"`
+	MedianCredit  float64       `json:"median_credit"`
+	Credits       []SalaryCredit `json:"credits"`
+	Gaps          []string      `json:"gaps"`
+	Confidence    float64       `json:"confidence"`
+	Notes         string        `json:"notes,omitempty"`
+	Provider      string        `json:"provider,omitempty"`
+	Model         string        `json:"model,omitempty"`
+}
 
-// DraftAdvisorReview uses a single provider (Claude preferred) for advisor drafts.
-func (c *Client) DraftAdvisorReview(ctx context.Context, caseBrief string) (*ConciergeDraft, error) {
+const extractSystem = `Extract recurring salary credits from bank statement text.
+Return JSON only with keys: months_found (int), median_credit (number), credits (array of {date, amount, description}), gaps (string array), confidence (0-1), notes (string).
+Do not invent transactions. If unclear, lower confidence and explain in notes.`
+
+// ExtractSalaryPattern uses the documents-preferred model on statement text.
+// Call only when OCR/text extraction of an uploaded statement is available.
+func (c *Client) ExtractSalaryPattern(ctx context.Context, statementText string) (*SalaryExtraction, error) {
 	req := CompletionRequest{
-		System: conciergeSystem,
-		User: fmt.Sprintf(`Given this mortgage enablement case, draft advisor guidance as JSON with keys:
-message (string), actions (array of short snake_case action ids), priority (low|medium|high), rationale (short string).
-
-Case brief:
-%s`, caseBrief),
-		JSON: true,
+		System: extractSystem,
+		User:   "Bank statement text:\n\n" + statementText,
+		JSON:   true,
 	}
-	comp, err := c.Complete(ctx, JobConcierge, req)
+	comp, err := c.Complete(ctx, JobDocuments, req)
 	if err != nil {
 		return nil, err
 	}
-	draft := parseConciergeDraft(*comp)
-	return &draft, nil
+	raw := extractJSONObject(comp.Text)
+	var out SalaryExtraction
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil, fmt.Errorf("ai salary extract parse: %w", err)
+	}
+	out.Provider = string(comp.Provider)
+	out.Model = comp.Model
+	if out.Confidence == 0 && out.MonthsFound == 0 && len(out.Credits) == 0 {
+		return nil, errors.New("ai salary extract: empty result")
+	}
+	return &out, nil
 }
 
-func parseConciergeDraft(comp Completion) ConciergeDraft {
-	raw := extractJSONObject(comp.Text)
-	var d ConciergeDraft
-	if err := json.Unmarshal([]byte(raw), &d); err != nil {
-		d = ConciergeDraft{
-			Message:     strings.TrimSpace(comp.Text),
-			Actions:     []string{"review_case"},
-			Priority:    "medium",
-			RawFallback: comp.Text,
-		}
+// ExplainNumerics is reserved for rare free-text explanation of already-computed
+// calculator/eligibility numbers. Prefer showing the numbers themselves in UI.
+func (c *Client) ExplainNumerics(ctx context.Context, computedSummary string) (string, error) {
+	req := CompletionRequest{
+		System: "Explain these already-calculated mortgage figures in plain language. Do not recalculate. Never say the applicant is approved.",
+		User:   computedSummary,
+		JSON:   false,
 	}
-	if d.Message == "" {
-		d.Message = "Review this customer case and confirm next document steps."
+	comp, err := c.Complete(ctx, JobNumerics, req)
+	if err != nil {
+		return "", err
 	}
-	if len(d.Actions) == 0 {
-		d.Actions = []string{"review_documents"}
-	}
-	if d.Priority == "" {
-		d.Priority = "medium"
-	}
-	d.Provider = string(comp.Provider)
-	d.Model = comp.Model
-	return d
+	return strings.TrimSpace(comp.Text), nil
 }

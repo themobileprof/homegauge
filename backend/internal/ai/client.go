@@ -26,11 +26,9 @@ const (
 type Job string
 
 const (
-	// JobConcierge — advisor drafts, careful non-approval wording.
-	JobConcierge Job = "concierge"
-	// JobDocuments — statement/PDF extraction and document understanding.
+	// JobDocuments — unstructured statement/PDF understanding only.
 	JobDocuments Job = "documents"
-	// JobNumerics — affordability / ITI / repayment reasoning.
+	// JobNumerics — optional plain-language explanation of *already computed* figures.
 	JobNumerics Job = "numerics"
 )
 
@@ -93,12 +91,9 @@ func preferredForJob(job Job) []ProviderName {
 		// Gemini: strong multimodal / document extraction.
 		return []ProviderName{ProviderGemini, ProviderAnthropic, ProviderDeepSeek}
 	case JobNumerics:
-		// DeepSeek reasoner: quantitative / step reasoning.
+		// DeepSeek reasoner: explain already-computed figures if needed.
 		return []ProviderName{ProviderDeepSeek, ProviderAnthropic, ProviderGemini}
-	case JobConcierge:
-		fallthrough
 	default:
-		// Claude: careful advisor language and structured drafts.
 		return []ProviderName{ProviderAnthropic, ProviderGemini, ProviderDeepSeek}
 	}
 }
@@ -115,7 +110,7 @@ func (c *Client) ForJob(job Job) (Provider, error) {
 // JobRouting reports which configured provider would handle each job.
 func (c *Client) JobRouting() map[string]string {
 	out := map[string]string{}
-	for _, job := range []Job{JobConcierge, JobDocuments, JobNumerics} {
+	for _, job := range []Job{JobDocuments, JobNumerics} {
 		if p, err := c.ForJob(job); err == nil {
 			out[string(job)] = string(p.Name()) + "/" + p.Model()
 		} else {

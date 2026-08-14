@@ -79,8 +79,8 @@ func main() {
 		cfg.GeminiAPIKey, cfg.GeminiModel,
 		cfg.DeepSeekAPIKey, cfg.DeepSeekModel,
 	)
-	slog.Info("ai job routing", "routing", aiClient.JobRouting(), "configured", aiClient.ConfiguredProviders())
-	appSvc := applications.NewService(sqlDB, aiClient)
+	slog.Info("ai reserved for unstructured jobs", "routing", aiClient.JobRouting(), "configured", aiClient.ConfiguredProviders())
+	appSvc := applications.NewService(sqlDB)
 	appHandler := applications.NewHandler(appSvc)
 
 	if cfg.AppEnv == "production" {
@@ -120,7 +120,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"configured": aiClient.ConfiguredProviders(),
 			"routing":    aiClient.JobRouting(),
-			"policy":     "one provider per job; fallback if preferred missing",
+			"policy":     "AI only for unstructured work (e.g. salary statement extraction). Eligibility, affordability, readiness, and advisor checklists are programmatic.",
 		})
 	})
 
