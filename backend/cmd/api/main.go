@@ -79,7 +79,7 @@ func main() {
 		cfg.GeminiAPIKey, cfg.GeminiModel,
 		cfg.DeepSeekAPIKey, cfg.DeepSeekModel,
 	)
-	slog.Info("ai providers configured", "providers", aiClient.ConfiguredProviders())
+	slog.Info("ai job routing", "routing", aiClient.JobRouting(), "configured", aiClient.ConfiguredProviders())
 	appSvc := applications.NewService(sqlDB, aiClient)
 	appHandler := applications.NewHandler(appSvc)
 
@@ -118,12 +118,9 @@ func main() {
 	})
 	admin.GET("/ai-status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"providers": aiClient.ConfiguredProviders(),
-			"models": gin.H{
-				"anthropic": cfg.AnthropicModel,
-				"gemini":    cfg.GeminiModel,
-				"deepseek":  cfg.DeepSeekModel,
-			},
+			"configured": aiClient.ConfiguredProviders(),
+			"routing":    aiClient.JobRouting(),
+			"policy":     "one provider per job; fallback if preferred missing",
 		})
 	})
 

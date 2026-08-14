@@ -22,15 +22,22 @@ const (
 	ProviderDeepSeek ProviderName = "deepseek"
 )
 
-type Message struct {
-	Role    string `json:"role"` // user | system
-	Content string `json:"content"`
-}
+// Job selects a single provider by strength (no fan-out).
+type Job string
+
+const (
+	// JobConcierge — advisor drafts, careful non-approval wording.
+	JobConcierge Job = "concierge"
+	// JobDocuments — statement/PDF extraction and document understanding.
+	JobDocuments Job = "documents"
+	// JobNumerics — affordability / ITI / repayment reasoning.
+	JobNumerics Job = "numerics"
+)
 
 type CompletionRequest struct {
 	System string
 	User   string
-	JSON   bool // ask for JSON-only reply when possible
+	JSON   bool
 }
 
 type Completion struct {
@@ -47,89 +54,83 @@ type Provider interface {
 }
 
 type Client struct {
-	providers []Provider
-	http      *http.Client
+	byName map[ProviderName]Provider
+	order  []ProviderName // fallback order
+	http   *http.Client
 }
 
 func NewClient(anthropicKey, anthropicModel, geminiKey, geminiModel, deepseekKey, deepseekModel string) *Client {
 	httpClient := &http.Client{Timeout: 90 * time.Second}
-	c := &Client{http: httpClient}
-	c.providers = []Provider{
-		&anthropicProvider{apiKey: anthropicKey, model: anthropicModel, http: httpClient},
-		&geminiProvider{apiKey: geminiKey, model: geminiModel, http: httpClient},
-		&deepseekProvider{apiKey: deepseekKey, model: deepseekModel, http: httpClient},
+	c := &Client{
+		byName: map[ProviderName]Provider{},
+		order:  []ProviderName{ProviderAnthropic, ProviderGemini, ProviderDeepSeek},
+		http:   httpClient,
 	}
+	c.register(&anthropicProvider{apiKey: anthropicKey, model: anthropicModel, http: httpClient})
+	c.register(&geminiProvider{apiKey: geminiKey, model: geminiModel, http: httpClient})
+	c.register(&deepseekProvider{apiKey: deepseekKey, model: deepseekModel, http: httpClient})
 	return c
+}
+
+func (c *Client) register(p Provider) {
+	c.byName[p.Name()] = p
 }
 
 func (c *Client) ConfiguredProviders() []ProviderName {
 	var out []ProviderName
-	for _, p := range c.providers {
-		if p.Configured() {
-			out = append(out, p.Name())
+	for _, name := range c.order {
+		if p := c.byName[name]; p != nil && p.Configured() {
+			out = append(out, name)
 		}
 	}
 	return out
 }
 
-func (c *Client) Primary() (Provider, error) {
-	for _, p := range c.providers {
-		if p.Configured() {
+// preferredForJob is the first-choice provider for each job when configured.
+func preferredForJob(job Job) []ProviderName {
+	switch job {
+	case JobDocuments:
+		// Gemini: strong multimodal / document extraction.
+		return []ProviderName{ProviderGemini, ProviderAnthropic, ProviderDeepSeek}
+	case JobNumerics:
+		// DeepSeek reasoner: quantitative / step reasoning.
+		return []ProviderName{ProviderDeepSeek, ProviderAnthropic, ProviderGemini}
+	case JobConcierge:
+		fallthrough
+	default:
+		// Claude: careful advisor language and structured drafts.
+		return []ProviderName{ProviderAnthropic, ProviderGemini, ProviderDeepSeek}
+	}
+}
+
+func (c *Client) ForJob(job Job) (Provider, error) {
+	for _, name := range preferredForJob(job) {
+		if p := c.byName[name]; p != nil && p.Configured() {
 			return p, nil
 		}
 	}
 	return nil, ErrNoProvider
 }
 
-func (c *Client) Complete(ctx context.Context, req CompletionRequest) (*Completion, error) {
-	p, err := c.Primary()
+// JobRouting reports which configured provider would handle each job.
+func (c *Client) JobRouting() map[string]string {
+	out := map[string]string{}
+	for _, job := range []Job{JobConcierge, JobDocuments, JobNumerics} {
+		if p, err := c.ForJob(job); err == nil {
+			out[string(job)] = string(p.Name()) + "/" + p.Model()
+		} else {
+			out[string(job)] = "none"
+		}
+	}
+	return out
+}
+
+func (c *Client) Complete(ctx context.Context, job Job, req CompletionRequest) (*Completion, error) {
+	p, err := c.ForJob(job)
 	if err != nil {
 		return nil, err
 	}
 	return p.Complete(ctx, req)
-}
-
-// CompleteAll runs every configured provider (best-effort, in parallel) for multi-model review.
-func (c *Client) CompleteAll(ctx context.Context, req CompletionRequest) []Completion {
-	type result struct {
-		idx  int
-		comp *Completion
-	}
-	configured := make([]Provider, 0, len(c.providers))
-	for _, p := range c.providers {
-		if p.Configured() {
-			configured = append(configured, p)
-		}
-	}
-	if len(configured) == 0 {
-		return nil
-	}
-	ch := make(chan result, len(configured))
-	for i, p := range configured {
-		i, p := i, p
-		go func() {
-			res, err := p.Complete(ctx, req)
-			if err != nil || res == nil {
-				ch <- result{idx: i}
-				return
-			}
-			ch <- result{idx: i, comp: res}
-		}()
-	}
-	tmp := make([]*Completion, len(configured))
-	for range configured {
-		r := <-ch
-		if r.comp != nil {
-			tmp[r.idx] = r.comp
-		}
-	}
-	var out []Completion
-	for _, c := range tmp {
-		if c != nil {
-			out = append(out, *c)
-		}
-	}
-	return out
 }
 
 func postJSON(ctx context.Context, httpClient *http.Client, url string, headers map[string]string, body any) ([]byte, int, error) {
@@ -137,15 +138,15 @@ func postJSON(ctx context.Context, httpClient *http.Client, url string, headers 
 	if err != nil {
 		return nil, 0, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return nil, 0, err
 	}
-	req.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
-		req.Header.Set(k, v)
+		httpReq.Header.Set(k, v)
 	}
-	res, err := httpClient.Do(req)
+	res, err := httpClient.Do(httpReq)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -174,6 +175,13 @@ func extractJSONObject(s string) string {
 		return s[start : end+1]
 	}
 	return s
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 // --- Anthropic ---
@@ -223,9 +231,9 @@ func (p *anthropicProvider) Complete(ctx context.Context, req CompletionRequest)
 		return nil, err
 	}
 	var text strings.Builder
-	for _, c := range parsed.Content {
-		if c.Type == "text" {
-			text.WriteString(c.Text)
+	for _, part := range parsed.Content {
+		if part.Type == "text" {
+			text.WriteString(part.Text)
 		}
 	}
 	out := strings.TrimSpace(text.String())
@@ -290,7 +298,7 @@ func (p *geminiProvider) Complete(ctx context.Context, req CompletionRequest) (*
 	return &Completion{Provider: ProviderGemini, Model: p.model, Text: text}, nil
 }
 
-// --- DeepSeek (OpenAI-compatible) ---
+// --- DeepSeek ---
 
 type deepseekProvider struct {
 	apiKey string
@@ -344,11 +352,4 @@ func (p *deepseekProvider) Complete(ctx context.Context, req CompletionRequest) 
 	}
 	text := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	return &Completion{Provider: ProviderDeepSeek, Model: p.model, Text: text}, nil
-}
-
-func truncate(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
 }

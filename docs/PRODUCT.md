@@ -25,7 +25,7 @@ Secondary CTA: **Compare Mortgage Options**
 | Currency | Per-country (`countries.currency_code`); UI formats from selected market |
 | Default ITI guardrail | 35% unless product/country rule overrides |
 | Interest estimate | Reducing-balance monthly; always labelled estimate |
-| AI runtime | Anthropic Claude primary; Gemini + DeepSeek optional for multi-model advisor review |
+| AI runtime | One model per job: Claude (concierge), Gemini (documents), DeepSeek (numerics); fallback if preferred key missing |
 | Workflow orchestration | **n8n** for email/escalation webhooks (not core underwriting) |
 | Automation level | `suggest_only` at launch; `auto_safe` admin-toggleable |
 | Customer AI chat | Not in MVP |

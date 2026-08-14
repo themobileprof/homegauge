@@ -118,36 +118,17 @@ func (s *Service) createAISuggestions(ctx context.Context, app *Application) err
 	if err != nil {
 		return err
 	}
-	review, err := s.ai.DraftAdvisorReview(ctx, brief)
+	draft, err := s.ai.DraftAdvisorReview(ctx, brief)
 	if err != nil {
 		return err
 	}
 
-	primaryPayload, _ := json.Marshal(review.Primary)
-	conf := 0.75
-	if len(review.Reviews) > 0 {
-		conf = 0.85
-	}
+	primaryPayload, _ := json.Marshal(draft)
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
-		VALUES ($1, 'ai_advisor_draft', $2::jsonb, $3, 'pending')
-	`, app.ID, string(primaryPayload), conf)
-	if err != nil {
-		return err
-	}
-
-	if len(review.Reviews) > 0 {
-		multi, _ := json.Marshal(map[string]any{
-			"providers": review.Providers,
-			"reviews":   review.Reviews,
-			"note":      "Secondary model drafts for advisor comparison. Suggest-only — do not auto-apply.",
-		})
-		_, _ = s.db.ExecContext(ctx, `
-			INSERT INTO concierge_suggestions (application_id, suggestion_type, payload, confidence, status)
-			VALUES ($1, 'ai_multi_model_review', $2::jsonb, 0.7, 'pending')
-		`, app.ID, string(multi))
-	}
-	return nil
+		VALUES ($1, 'ai_advisor_draft', $2::jsonb, 0.8, 'pending')
+	`, app.ID, string(primaryPayload))
+	return err
 }
 
 func (s *Service) buildCaseBrief(ctx context.Context, app *Application) (string, error) {

@@ -17,22 +17,13 @@ type ConciergeDraft struct {
 	RawFallback string   `json:"raw_fallback,omitempty"`
 }
 
-type MultiReview struct {
-	Primary   ConciergeDraft   `json:"primary"`
-	Reviews   []ConciergeDraft `json:"reviews,omitempty"`
-	Providers []string         `json:"providers"`
-}
-
 const conciergeSystem = `You are HomeGauge's mortgage concierge assistant for salaried applicants.
 HomeGauge is NOT a bank and must never claim a loan is approved.
 Return practical next steps for a human advisor reviewing a case.
 Keep language plain and cautious.`
 
-// DraftAdvisorReview asks configured models for advisor next-step suggestions.
-func (c *Client) DraftAdvisorReview(ctx context.Context, caseBrief string) (*MultiReview, error) {
-	if len(c.ConfiguredProviders()) == 0 {
-		return nil, ErrNoProvider
-	}
+// DraftAdvisorReview uses a single provider (Claude preferred) for advisor drafts.
+func (c *Client) DraftAdvisorReview(ctx context.Context, caseBrief string) (*ConciergeDraft, error) {
 	req := CompletionRequest{
 		System: conciergeSystem,
 		User: fmt.Sprintf(`Given this mortgage enablement case, draft advisor guidance as JSON with keys:
@@ -42,28 +33,12 @@ Case brief:
 %s`, caseBrief),
 		JSON: true,
 	}
-
-	completions := c.CompleteAll(ctx, req)
-	if len(completions) == 0 {
-		// try primary once more for clearer error
-		_, err := c.Complete(ctx, req)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("ai: no usable completions")
+	comp, err := c.Complete(ctx, JobConcierge, req)
+	if err != nil {
+		return nil, err
 	}
-
-	out := &MultiReview{Providers: make([]string, 0, len(completions))}
-	for i, comp := range completions {
-		draft := parseConciergeDraft(comp)
-		out.Providers = append(out.Providers, string(comp.Provider))
-		if i == 0 {
-			out.Primary = draft
-		} else {
-			out.Reviews = append(out.Reviews, draft)
-		}
-	}
-	return out, nil
+	draft := parseConciergeDraft(*comp)
+	return &draft, nil
 }
 
 func parseConciergeDraft(comp Completion) ConciergeDraft {
