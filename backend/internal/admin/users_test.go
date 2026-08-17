@@ -36,3 +36,23 @@ func TestWouldDropLastAdmin(t *testing.T) {
 		t.Fatal("non-admin should not trigger last-admin guard")
 	}
 }
+
+func TestValidateProductWrite(t *testing.T) {
+	min, max := 10.0, 5.0
+	msg := validateProductWrite(productWrite{
+		LenderID: "not-a-uuid", CountryCode: "NG", Name: "X", MortgageType: "commercial",
+	})
+	if msg == "" {
+		t.Fatal("expected invalid lender")
+	}
+	msg = validateProductWrite(productWrite{
+		LenderID: "11111111-1111-1111-1111-111111111111", CountryCode: "NG", Name: "X",
+		MortgageType: "commercial", MinLoanAmount: &min, MaxLoanAmount: &max,
+	})
+	if msg == "" {
+		t.Fatal("expected min>max error")
+	}
+	if !validMortgageType("nhf") || validMortgageType("weird") {
+		t.Fatal("mortgage type")
+	}
+}

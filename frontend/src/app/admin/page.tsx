@@ -31,10 +31,10 @@ export default function AdminHomePage() {
       </p>
       {error && <p className="mt-6 text-sm text-[color:var(--danger)]">{error}</p>}
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="People on the platform" value={data?.users_total} />
-        <Stat label="Active products" value={data?.active_products} />
-        <Stat label="Active lenders" value={data?.active_lenders} />
-        <Stat label="Open cases" value={data?.open_cases} />
+        <Stat label="People on the platform" value={data?.users_total} href="/admin/users" />
+        <Stat label="Active products" value={data?.active_products} href="/admin/products" />
+        <Stat label="Active lenders" value={data?.active_lenders} href="/admin/products" />
+        <Stat label="Open cases" value={data?.open_cases} href="/advisor" />
       </div>
       <section className="mt-8 max-w-xl rounded-xl border border-[color:var(--line)] bg-white/80 p-6">
         <div className="flex items-start justify-between gap-3">
@@ -57,11 +57,19 @@ export default function AdminHomePage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value?: number }) {
-  return (
-    <div className="rounded-xl border border-[color:var(--line)] bg-white/80 p-5">
+function Stat({ label, value, href }: { label: string; value?: number; href?: string }) {
+  const inner = (
+    <>
       <p className="text-xs font-semibold uppercase tracking-wide text-muted">{label}</p>
       <p className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold">{value ?? "—"}</p>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <Link href={href} className="rounded-xl border border-[color:var(--line)] bg-white/80 p-5 hover:border-leaf">
+        {inner}
+      </Link>
+    );
+  }
+  return <div className="rounded-xl border border-[color:var(--line)] bg-white/80 p-5">{inner}</div>;
 }

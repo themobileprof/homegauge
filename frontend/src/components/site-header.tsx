@@ -13,7 +13,7 @@ function itemsForRole(role?: Role | null): NavItem[] {
     return [
       { href: "/admin", label: "Overview" },
       { href: "/admin/users", label: "Users" },
-      { href: "/mortgages", label: "Products" },
+      { href: "/admin/products", label: "Products" },
       { href: "/advisor", label: "Cases" },
       { href: "/calculator", label: "Calculator" },
     ];

@@ -75,12 +75,22 @@ ADMIN role only.
 | POST | `/admin/users` |
 | PATCH | `/admin/users/:id` |
 | DELETE | `/admin/users/:id` |
+| GET | `/admin/lenders` |
+| POST | `/admin/lenders` |
+| GET | `/admin/products` |
+| POST | `/admin/products` |
+| PATCH | `/admin/products/:id` |
+| DELETE | `/admin/products/:id` |
 | GET | `/admin/ping` |
 | GET | `/admin/ai-status` |
 
 Create body: `{ email, password, full_name, role }`. Role is `CUSTOMER`, `ADVISOR`, `ADMIN`, or `LENDER_USER`. Accounts are created verified so they can sign in immediately. `.local` demo emails are accepted.
 
 Update body (all optional): `{ full_name, role, status, password }`. Status is `active` or `disabled`. You cannot disable, demote, or delete your own account, and the last active admin cannot be removed.
+
+Product create/update body: `{ lender_id, country_code, name, mortgage_type, description, interest_rate, interest_rate_type, min_loan_amount, max_loan_amount, min_income, min_equity_pct, max_tenor_years, max_age, fees, status, verification_status, source, source_url, sync_rules }`. `mortgage_type` is `nhf`, `mreif`, `commercial`, `scheme`, or `other`. Status is `active` or `inactive`. Verification is `verified`, `needs_verification`, or `expired`. Saving with `sync_rules` (default true) updates eligibility rules for income, age, equity, and loan size. New products also get a default document checklist.
+
+Lender create body: `{ name, country_code, description, website }`.
 
 ## Advisor
 

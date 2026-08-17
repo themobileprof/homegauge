@@ -24,6 +24,12 @@ func (h *Handler) Register(rg *gin.RouterGroup) {
 	rg.POST("/users", h.CreateUser)
 	rg.PATCH("/users/:id", h.UpdateUser)
 	rg.DELETE("/users/:id", h.DeleteUser)
+	rg.GET("/lenders", h.ListLenders)
+	rg.POST("/lenders", h.CreateLender)
+	rg.GET("/products", h.ListProducts)
+	rg.POST("/products", h.CreateProduct)
+	rg.PATCH("/products/:id", h.UpdateProduct)
+	rg.DELETE("/products/:id", h.DeleteProduct)
 }
 
 func (h *Handler) Overview(c *gin.Context) {
