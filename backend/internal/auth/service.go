@@ -147,7 +147,7 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (*User, error)
 }
 
 type LoginInput struct {
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }
 
@@ -225,7 +225,20 @@ func (s *Service) SessionUser(ctx context.Context, sessionID string) (*SessionUs
 		return nil, err
 	}
 	_ = s.rdb.Expire(ctx, s.sessionKeyPx+sessionID, s.sessionTTL).Err()
-	return &su, nil
+	return s.LiveSessionUser(ctx, su)
+}
+
+// LiveSessionUser applies current role/status from the database so admin
+// disable, delete, and role changes take effect without waiting for re-login.
+func (s *Service) LiveSessionUser(ctx context.Context, su SessionUser) (*SessionUser, error) {
+	u, err := s.GetUser(ctx, su.ID)
+	if err != nil {
+		return nil, ErrInvalidCredentials
+	}
+	if u.Status != "active" {
+		return nil, ErrInvalidCredentials
+	}
+	return &SessionUser{ID: u.ID, Email: u.Email, Role: u.Role}, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {

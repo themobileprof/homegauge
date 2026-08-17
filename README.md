@@ -25,7 +25,8 @@ Mortgage enablement platform — understand options in your market, check salary
 - Salary-first eligibility assessment + readiness score
 - Personalized document checklist + private upload (signed download links)
 - Request advisor + advisor case queue (status, notes, AI suggestion approve/reject)
-- Auth roles: CUSTOMER / ADVISOR / ADMIN
+- Auth roles: CUSTOMER / ADVISOR / ADMIN / LENDER_USER
+- Role-specific workspaces: `/app` (homebuyer), `/advisor` (case queue), `/admin` (console), `/lender` (pipeline)
 
 ## Adding a country
 
@@ -38,38 +39,45 @@ Mortgage enablement platform — understand options in your market, check salary
 ```bash
 cp .env.example .env
 createdb homegauge   # if needed
+cd frontend && npm install && cd ..
 
-# API (from repo root so .env loads)
-go -C backend build -o /tmp/homegauge-api ./cmd/api
-go -C backend build -o /tmp/homegauge-seed ./cmd/seed
-/tmp/homegauge-api
-/tmp/homegauge-seed
-
-# Web
-cd frontend && npm install && npm run dev
+make start     # API + web in the background
+make status
+make stop
 ```
 
-If `next dev` fails with a corrupt SWC binary (`bus error` / “missing section headers”), restore from the vendored tarball (or re-download from a fast npm mirror):
+First-time data (demo users and NG products):
 
 ```bash
-cd frontend
-tar -xzf .vendor/swc-linux-x64-gnu-15.5.23.tgz -C /tmp
-rm -rf node_modules/@next/swc-linux-x64-gnu
-mv /tmp/package node_modules/@next/swc-linux-x64-gnu
-npm run dev
+make seed
 ```
+
+If `next dev` fails with a corrupt SWC binary (`bus error` / “missing section headers”):
+
+```bash
+make fix-swc
+make start
+```
+
+Other targets: `make restart`, `make logs`, `make build`. Run `make` for the full list.
 
 - Web: http://localhost:3000  
 - API health: http://localhost:8080/health  
-- Advisor UI: http://localhost:3000/advisor  
+- Homebuyer: http://localhost:3000/app  
+- Advisor: http://localhost:3000/advisor  
+- Admin: http://localhost:3000/admin  
+- Lender: http://localhost:3000/lender  
+
+`.local` demo emails are accepted on the sign-in form. Re-run `make seed` if a demo password was changed.
 
 ### Seed logins
 
-| Email | Password | Role |
-|-------|----------|------|
-| admin@homegauge.local | ChangeMeAdmin1! | ADMIN |
-| advisor@homegauge.local | ChangeMeAdvisor1! | ADVISOR |
-| demo@homegauge.local | ChangeMeDemo1! | CUSTOMER |
+| Email | Password | Role | Lands on |
+|-------|----------|------|----------|
+| admin@homegauge.local | ChangeMeAdmin1! | ADMIN | `/admin` |
+| advisor@homegauge.local | ChangeMeAdvisor1! | ADVISOR | `/advisor` |
+| lender@homegauge.local | ChangeMeLender1! | LENDER_USER | `/lender` |
+| demo@homegauge.local | ChangeMeDemo1! | CUSTOMER | `/app` |
 
 ## Tests
 

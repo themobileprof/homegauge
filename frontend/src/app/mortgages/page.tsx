@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { CountrySwitcher, useCountry } from "@/lib/country";
+import { useCountry } from "@/lib/country";
 
 type Product = {
   id: string;
@@ -54,19 +54,8 @@ export default function MortgagesPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-5">
-        <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-          Home<span className="text-leaf">Gauge</span>
-        </Link>
-        <div className="flex items-center gap-4 text-sm font-semibold">
-          <CountrySwitcher />
-          <Link href="/calculator" className="text-ink-soft">Calculator</Link>
-          <Link href="/register" className="text-leaf">Check eligibility</Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl px-5 pb-20">
+    <div>
+      <main className="mx-auto max-w-6xl px-5 py-10 pb-20">
         <h1 className="font-[family-name:var(--font-display)] text-4xl font-semibold">Mortgage options</h1>
         <p className="mt-3 max-w-2xl text-muted">
           Compare mortgage products in {country?.name || "your market"}. Every rate shows when it was last verified. HomeGauge is not a lender.

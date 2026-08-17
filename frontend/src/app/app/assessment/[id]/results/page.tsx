@@ -45,11 +45,11 @@ export default function ResultsPage() {
   }, [id]);
 
   return (
-    <div className="mx-auto min-h-screen max-w-3xl px-5 py-8">
-      <Link href="/app" className="font-[family-name:var(--font-display)] text-xl font-semibold">
-        Home<span className="text-leaf">Gauge</span>
+    <div className="mx-auto max-w-3xl px-5 py-8">
+      <Link href="/app" className="text-sm font-semibold text-leaf">
+        ← Dashboard
       </Link>
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl font-semibold">Your eligibility results</h1>
+      <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-semibold">Your eligibility results</h1>
       <p className="mt-2 text-sm text-muted">
         Based on the information provided, you appear to meet — or not meet — stated product criteria. This is not a bank approval.
       </p>

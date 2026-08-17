@@ -44,15 +44,10 @@ function CompareInner() {
   }, [params]);
 
   return (
-    <div className="min-h-screen">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
+    <div>
+      <main className="mx-auto max-w-6xl overflow-x-auto px-5 py-10 pb-20">
         <Link href="/mortgages" className="text-sm font-semibold text-leaf">← Mortgage options</Link>
-        <Link href="/" className="font-[family-name:var(--font-display)] text-xl font-semibold">
-          Home<span className="text-leaf">Gauge</span>
-        </Link>
-      </header>
-      <main className="mx-auto max-w-6xl overflow-x-auto px-5 pb-20">
-        <h1 className="font-[family-name:var(--font-display)] text-3xl font-semibold">Compare mortgages</h1>
+        <h1 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-semibold">Compare mortgages</h1>
         <p className="mt-2 text-sm text-muted">Plain-language comparison. Confirm current terms with the lender.</p>
         {error && <p className="mt-6 text-sm text-[color:var(--danger)]">{error}</p>}
         {products.length > 0 && (

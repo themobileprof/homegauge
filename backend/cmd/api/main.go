@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
-	"github.com/homegauge/homegauge/backend/internal/applications"
+	"github.com/homegauge/homegauge/backend/internal/admin"
 	"github.com/homegauge/homegauge/backend/internal/ai"
+	"github.com/homegauge/homegauge/backend/internal/applications"
 	"github.com/homegauge/homegauge/backend/internal/auth"
 	"github.com/homegauge/homegauge/backend/internal/calculator"
 	"github.com/homegauge/homegauge/backend/internal/config"
@@ -112,17 +113,19 @@ func main() {
 	docHandler.RegisterCustomer(authed)
 	appHandler.RegisterCustomer(authed)
 
-	admin := api.Group("/admin", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdmin))
-	admin.GET("/ping", func(c *gin.Context) {
+	adminAPI := api.Group("/admin", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdmin))
+	adminAPI.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "scope": "admin"})
 	})
-	admin.GET("/ai-status", func(c *gin.Context) {
+	adminAPI.GET("/ai-status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"configured": aiClient.ConfiguredProviders(),
 			"routing":    aiClient.JobRouting(),
 			"policy":     "AI only for unstructured work (e.g. salary statement extraction). Eligibility, affordability, readiness, and advisor checklists are programmatic.",
 		})
 	})
+	adminHandler := admin.NewHandler(sqlDB, aiClient)
+	adminHandler.Register(adminAPI)
 
 	advisor := api.Group("/advisor", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdvisor, auth.RoleAdmin))
 	advisor.GET("/ping", func(c *gin.Context) {

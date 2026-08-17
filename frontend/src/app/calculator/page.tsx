@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
-import { CountrySwitcher, useCountry } from "@/lib/country";
+import { useCountry } from "@/lib/country";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
@@ -65,20 +64,8 @@ export default function CalculatorPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-5">
-        <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-          Home<span className="text-leaf">Gauge</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <CountrySwitcher />
-          <Link href="/register" className="text-sm font-semibold text-leaf">
-            Check eligibility
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto grid max-w-5xl gap-8 px-5 pb-20 md:grid-cols-2">
+    <div>
+      <main className="mx-auto grid max-w-5xl gap-8 px-5 py-10 pb-20 md:grid-cols-2">
         <section>
           <h1 className="font-[family-name:var(--font-display)] text-4xl font-semibold">Affordability calculator</h1>
           <p className="mt-3 text-muted">

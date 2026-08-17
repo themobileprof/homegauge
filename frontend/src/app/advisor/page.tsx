@@ -24,12 +24,10 @@ export default function AdvisorPage() {
   }, []);
 
   return (
-    <div className="mx-auto min-h-screen max-w-5xl px-5 py-10">
-      <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-        Home<span className="text-leaf">Gauge</span> <span className="text-sm font-normal text-muted">Advisor</span>
-      </Link>
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl font-semibold">Case queue</h1>
-      <p className="mt-2 text-sm text-muted">Review customer eligibility, documents, and AI suggestions.</p>
+    <div className="mx-auto max-w-5xl px-5 py-10 md:px-8">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a6d28]">Advisor workspace</p>
+      <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold">Case queue</h1>
+      <p className="mt-2 text-sm text-muted">Review customer eligibility, documents, and next actions. This is staff work — not your personal mortgage file.</p>
       {error && <p className="mt-4 text-sm text-[color:var(--danger)]">{error}</p>}
       <div className="mt-8 space-y-3">
         {cases.map((c) => (

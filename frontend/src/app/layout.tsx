@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
 import { CountryProvider } from "@/lib/country";
+import { AuthProvider } from "@/lib/auth";
+import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
 const display = Fraunces({
@@ -29,7 +31,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${display.variable} ${body.variable} antialiased`}>
-        <CountryProvider>{children}</CountryProvider>
+        <AuthProvider>
+          <CountryProvider>
+            <SiteHeader />
+            {children}
+          </CountryProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, apiBase } from "@/lib/api";
 
@@ -60,11 +59,14 @@ export default function DocumentsPage() {
   const done = items.filter((i) => ["uploaded", "under_review", "accepted"].includes(i.status)).length;
 
   return (
-    <div className="mx-auto min-h-screen max-w-3xl px-5 py-10">
+    <div className="mx-auto max-w-3xl px-5 py-10">
       <div className="flex items-center justify-between gap-4">
-        <Link href="/app" className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-          Home<span className="text-leaf">Gauge</span>
-        </Link>
+        <div>
+          <h1 className="font-[family-name:var(--font-display)] text-3xl font-semibold">Your documents</h1>
+          <p className="mt-2 text-sm text-muted">
+            Upload PDF, JPG, or PNG (max 10MB). Files stay private — only short-lived signed links can open them.
+          </p>
+        </div>
         <button
           type="button"
           onClick={() =>
@@ -72,16 +74,11 @@ export default function DocumentsPage() {
               .then(() => setMessage("Advisor requested. They will review your case."))
               .catch((e) => setError(e.message))
           }
-          className="rounded-md border border-[color:var(--line)] px-3 py-2 text-sm font-semibold"
+          className="shrink-0 rounded-md border border-[color:var(--line)] px-3 py-2 text-sm font-semibold"
         >
           Request advisor
         </button>
       </div>
-
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl font-semibold">Your documents</h1>
-      <p className="mt-2 text-sm text-muted">
-        Upload PDF, JPG, or PNG (max 10MB). Files stay private — only short-lived signed links can open them.
-      </p>
       <p className="mt-4 text-sm font-semibold text-leaf">{done} of {items.length} started</p>
 
       {error && <p className="mt-4 text-sm text-[color:var(--danger)]">{error}</p>}

@@ -113,18 +113,28 @@ func seedUsers(ctx context.Context, db *sql.DB) error {
 		{"admin@homegauge.local", "ChangeMeAdmin1!", "ADMIN", "HomeGauge Admin"},
 		{"advisor@homegauge.local", "ChangeMeAdvisor1!", "ADVISOR", "HomeGauge Advisor"},
 		{"demo@homegauge.local", "ChangeMeDemo1!", "CUSTOMER", "Demo Customer"},
+		{"lender@homegauge.local", "ChangeMeLender1!", "LENDER_USER", "HomeGauge Lender"},
 	}
 	for _, u := range users {
+		hash, err := bcrypt.GenerateFromPassword([]byte(u.password), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
 		var existing string
-		err := db.QueryRowContext(ctx, `SELECT id::text FROM users WHERE LOWER(email)=LOWER($1) AND deleted_at IS NULL`, u.email).Scan(&existing)
+		err = db.QueryRowContext(ctx, `SELECT id::text FROM users WHERE LOWER(email)=LOWER($1) AND deleted_at IS NULL`, u.email).Scan(&existing)
 		if err == nil {
+			_, err = db.ExecContext(ctx, `
+				UPDATE users
+				SET password_hash=$2, role=$3, status='active', email_verified_at=COALESCE(email_verified_at, NOW()), updated_at=NOW()
+				WHERE id=$1::uuid
+			`, existing, string(hash), u.role)
+			if err != nil {
+				return err
+			}
+			_, _ = db.ExecContext(ctx, `UPDATE user_profiles SET full_name=$2, updated_at=NOW() WHERE user_id=$1::uuid`, existing, u.name)
 			continue
 		}
 		if err != sql.ErrNoRows {
-			return err
-		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(u.password), bcrypt.DefaultCost)
-		if err != nil {
 			return err
 		}
 		var id string

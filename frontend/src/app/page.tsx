@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { CountrySwitcher } from "@/lib/country";
 
 const steps = [
   {
@@ -37,31 +36,7 @@ const faqs = [
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen text-ink">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-5 md:px-8">
-        <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold tracking-tight">
-          Home<span className="text-leaf">Gauge</span>
-        </Link>
-        <nav className="hidden items-center gap-8 text-sm font-medium text-ink-soft md:flex">
-          <a href="#how">How it works</a>
-          <Link href="/calculator">Calculator</Link>
-          <Link href="/mortgages">Mortgage options</Link>
-          <Link href="/learn">Learn</Link>
-        </nav>
-        <div className="flex items-center gap-3">
-          <CountrySwitcher className="hidden sm:inline-flex" />
-          <Link href="/login" className="hidden text-sm font-semibold text-ink-soft sm:inline">
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-md bg-leaf px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-leaf-deep"
-          >
-            Get started
-          </Link>
-        </div>
-      </header>
-
+    <div className="text-ink">
       <main>
         <section className="relative mx-auto grid min-h-[calc(100vh-5.5rem)] w-full max-w-6xl items-center gap-10 px-5 pb-16 pt-6 md:grid-cols-[1.1fr_0.9fr] md:px-8 md:pb-24">
           <div className="animate-[fadeUp_0.7s_ease_both]">

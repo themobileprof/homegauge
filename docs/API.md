@@ -64,6 +64,24 @@ Complete runs the rules engine + readiness score against active products. Outcom
 | GET | `/applications/me` | customer |
 | POST | `/applications/request-advisor` | customer |
 
+## Admin
+
+ADMIN role only.
+
+| Method | Path |
+|--------|------|
+| GET | `/admin/overview` |
+| GET | `/admin/users` |
+| POST | `/admin/users` |
+| PATCH | `/admin/users/:id` |
+| DELETE | `/admin/users/:id` |
+| GET | `/admin/ping` |
+| GET | `/admin/ai-status` |
+
+Create body: `{ email, password, full_name, role }`. Role is `CUSTOMER`, `ADVISOR`, `ADMIN`, or `LENDER_USER`. Accounts are created verified so they can sign in immediately. `.local` demo emails are accepted.
+
+Update body (all optional): `{ full_name, role, status, password }`. Status is `active` or `disabled`. You cannot disable, demote, or delete your own account, and the last active admin cannot be removed.
+
 ## Advisor
 
 | Method | Path |

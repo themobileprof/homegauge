@@ -54,11 +54,8 @@ export default function RegisterPage() {
 
 function AuthShell({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-12">
-      <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-        Home<span className="text-leaf">Gauge</span>
-      </Link>
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl font-semibold">{title}</h1>
+    <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-md flex-col justify-center px-5 py-12">
+      <h1 className="font-[family-name:var(--font-display)] text-3xl font-semibold">{title}</h1>
       <p className="mt-2 text-sm text-muted">{subtitle}</p>
       <div className="mt-8">{children}</div>
     </div>

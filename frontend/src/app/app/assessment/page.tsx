@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { CountrySwitcher, useCountry } from "@/lib/country";
+import { useCountry } from "@/lib/country";
 
 type Assessment = { id: string };
 
@@ -99,14 +98,8 @@ export default function AssessmentPage() {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-xl px-5 py-8">
-      <div className="flex items-center justify-between gap-3">
-        <Link href="/app" className="font-[family-name:var(--font-display)] text-xl font-semibold">
-          Home<span className="text-leaf">Gauge</span>
-        </Link>
-        <CountrySwitcher />
-      </div>
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-3xl font-semibold">Check eligibility</h1>
+    <div className="mx-auto max-w-xl px-5 py-8">
+      <h1 className="font-[family-name:var(--font-display)] text-3xl font-semibold">Check eligibility</h1>
       <p className="mt-2 text-sm text-muted">
         Built around your salary account in {country?.name || "your market"}. We look for about 6 months of clear salary credits.
       </p>

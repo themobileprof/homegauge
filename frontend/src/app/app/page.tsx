@@ -29,18 +29,10 @@ export default function AppHome() {
   const likely = (assessment?.results || []).filter((r) => r.outcome === "likely_eligible" || r.outcome === "potentially_eligible").length;
 
   return (
-    <div className="mx-auto max-w-3xl px-5 py-12">
-      <div className="flex items-center justify-between gap-4">
-        <Link href="/" className="font-[family-name:var(--font-display)] text-2xl font-semibold">
-          Home<span className="text-leaf">Gauge</span>
-        </Link>
-        <Link href="/app/assessment" className="text-sm font-semibold text-leaf">
-          {completed ? "Retake assessment" : "Start assessment"}
-        </Link>
-      </div>
-
-      <h1 className="mt-8 font-[family-name:var(--font-display)] text-4xl font-semibold">Your mortgage journey</h1>
-      <p className="mt-3 text-muted">Keep this simple: know where you stand, prepare documents, get help when you need it.</p>
+    <div className="mx-auto max-w-3xl px-5 py-10">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-leaf">Homebuyer workspace</p>
+      <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl font-semibold">Your mortgage journey</h1>
+      <p className="mt-3 text-muted">Know where you stand, prepare documents, and get help when you need it. This is your personal file — not the advisor or admin console.</p>
 
       <ol className="mt-10 space-y-3 text-sm">
         <li className={completed ? "text-leaf" : ""}>{completed ? "✓" : "○"} Eligibility assessment</li>
