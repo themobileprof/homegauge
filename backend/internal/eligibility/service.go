@@ -77,6 +77,9 @@ type ProductOutcome struct {
 	Detail                     json.RawMessage `json:"detail"`
 	EstimatedMonthlyRepayment  *float64        `json:"estimated_monthly_repayment,omitempty"`
 	InterestRate               *float64        `json:"interest_rate,omitempty"`
+	InterestRateMin            *float64        `json:"interest_rate_min,omitempty"`
+	InterestRateMax            *float64        `json:"interest_rate_max,omitempty"`
+	InterestRateType           string          `json:"interest_rate_type,omitempty"`
 	MinEquityPct               *float64        `json:"min_equity_pct,omitempty"`
 	VerificationStatus         string          `json:"verification_status"`
 	LastVerifiedAt             *time.Time      `json:"last_verified_at,omitempty"`
@@ -291,6 +294,10 @@ func (s *Service) buildContext(in AssessmentInput, p mortgages.Product) (Context
 	rate := 0.0
 	if p.InterestRate != nil {
 		rate = *p.InterestRate
+	} else if p.InterestRateMin != nil && p.InterestRateMax != nil {
+		rate = (*p.InterestRateMin + *p.InterestRateMax) / 2
+	} else if p.InterestRateMin != nil {
+		rate = *p.InterestRateMin
 	}
 	est := calculator.Affordability(calculator.Input{
 		PropertyPrice:       in.DesiredPropertyPrice,
@@ -385,7 +392,7 @@ func (s *Service) LatestForUser(ctx context.Context, userID uuid.UUID) (*Assessm
 func (s *Service) loadResults(ctx context.Context, assessmentID uuid.UUID) ([]ProductOutcome, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT r.product_id, p.name, l.name, r.outcome, r.explanation, r.detail, r.estimated_monthly_repayment,
-			p.interest_rate, p.min_equity_pct, p.verification_status, p.last_verified_at
+			p.interest_rate, p.interest_rate_min, p.interest_rate_max, p.interest_rate_type, p.min_equity_pct, p.verification_status, p.last_verified_at
 		FROM eligibility_results r
 		JOIN mortgage_products p ON p.id = r.product_id
 		JOIN lenders l ON l.id = p.lender_id
@@ -407,10 +414,10 @@ func (s *Service) loadResults(ctx context.Context, assessmentID uuid.UUID) ([]Pr
 	var out []ProductOutcome
 	for rows.Next() {
 		var o ProductOutcome
-		var pay, rate, equity sql.NullFloat64
+		var pay, rate, rateMin, rateMax, equity sql.NullFloat64
 		var verified sql.NullTime
 		var detail []byte
-		if err := rows.Scan(&o.ProductID, &o.ProductName, &o.LenderName, &o.Outcome, &o.Explanation, &detail, &pay, &rate, &equity, &o.VerificationStatus, &verified); err != nil {
+		if err := rows.Scan(&o.ProductID, &o.ProductName, &o.LenderName, &o.Outcome, &o.Explanation, &detail, &pay, &rate, &rateMin, &rateMax, &o.InterestRateType, &equity, &o.VerificationStatus, &verified); err != nil {
 			return nil, err
 		}
 		o.Detail = detail
@@ -421,6 +428,14 @@ func (s *Service) loadResults(ctx context.Context, assessmentID uuid.UUID) ([]Pr
 		if rate.Valid {
 			v := rate.Float64
 			o.InterestRate = &v
+		}
+		if rateMin.Valid {
+			v := rateMin.Float64
+			o.InterestRateMin = &v
+		}
+		if rateMax.Valid {
+			v := rateMax.Float64
+			o.InterestRateMax = &v
 		}
 		if equity.Valid {
 			v := equity.Float64

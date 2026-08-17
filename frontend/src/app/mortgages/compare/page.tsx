@@ -5,12 +5,15 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
+import { formatRate } from "@/lib/rates";
 
 type Product = {
   id: string;
   lender_name: string;
   name: string;
   interest_rate: number | null;
+  interest_rate_min: number | null;
+  interest_rate_max: number | null;
   interest_rate_type: string;
   max_tenor_years: number | null;
   min_equity_pct: number | null;
@@ -61,7 +64,7 @@ function CompareInner() {
               </tr>
             </thead>
             <tbody>
-              <CmpRow label="Interest rate" values={products.map((p) => (p.interest_rate != null ? `${p.interest_rate}% (${p.interest_rate_type})` : "—"))} />
+              <CmpRow label="Interest rate" values={products.map((p) => formatRate(p))} />
               <CmpRow label="Years to repay" values={products.map((p) => (p.max_tenor_years ? `${p.max_tenor_years}` : "—"))} />
               <CmpRow label="Deposit needed" values={products.map((p) => (p.min_equity_pct != null ? `${p.min_equity_pct}%` : "—"))} />
               <CmpRow label="Minimum income" values={products.map((p) => money(p.min_income))} />

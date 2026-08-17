@@ -182,7 +182,7 @@ func seedLendersAndProducts(ctx context.Context, db *sql.DB) error {
 	var nhfProduct string
 	if err := upsertProduct(ctx, db, &nhfProduct, country, fmbnID, "NHF Mortgage Loan",
 		"Social mortgage for NHF contributors, usually via a Primary Mortgage Bank. Interest commonly cited at 6% p.a.; max loan up to 50m NGN; long tenor up to 30 years subject to age. Equity often 0–10% by loan band — confirm current FMBN circular.",
-		"nhf", 1_000_000, 50_000_000, 6.0, "fixed", 30, 10, 18, 60,
+		"nhf", 1_000_000, 50_000_000, 6.0, 6.0, 6.0, "fixed", 30, 10, 18, 60,
 		"FMBN / PMB public materials", "https://www.fmbn.gov.ng", "needs_verification", nil); err != nil {
 		return err
 	}
@@ -207,7 +207,7 @@ func seedLendersAndProducts(ctx context.Context, db *sql.DB) error {
 	var mreif string
 	if err := upsertProduct(ctx, db, &mreif, country, stanbicID, "MREIF Home Loan",
 		"Ministry of Finance Incorporated Real Estate Investment Fund home loan via Stanbic IBTC. Lender FAQ: 9.75% p.a., 10% equity, 10m–100m NGN, up to 20 years, ITI 35%, salary domiciliation required for salaried applicants.",
-		"mreif", 10_000_000, 100_000_000, 9.75, "fixed", 20, 10, 500000, 60,
+		"mreif", 10_000_000, 100_000_000, 9.75, 9.75, 9.75, "fixed", 20, 10, 500000, 60,
 		"Stanbic IBTC MREIF FAQ", "https://www.stanbicibtcbank.com/nigeriabank/personal/products-and-services/all-loans/MREIF-Frequently-Asked-Questions",
 		"verified", &now); err != nil {
 		return err
@@ -234,8 +234,8 @@ func seedLendersAndProducts(ctx context.Context, db *sql.DB) error {
 
 	var comm string
 	if err := upsertProduct(ctx, db, &comm, country, commercialID, "Commercial bank mortgage (indicative)",
-		"Typical commercial mortgages in a high-rate environment often price roughly in the low-to-mid 20%s with 20–30% equity and 10–20 year tenors. Not a specific bank offer — needs verification.",
-		"commercial", 5_000_000, 150_000_000, 24.0, "variable", 15, 25, 750000, 55,
+		"Typical commercial mortgages in a high-rate environment often price roughly from 20–26% p.a. (indicative 24%), with 20–30% equity and 10–20 year tenors. The actual rate is negotiated with the lender — this is not an offer.",
+		"commercial", 5_000_000, 150_000_000, 24.0, 20.0, 26.0, "negotiable", 15, 25, 750000, 55,
 		"Market indicative 2026", "", "needs_verification", nil); err != nil {
 		return err
 	}
@@ -278,7 +278,7 @@ func upsertLender(ctx context.Context, db *sql.DB, id *string, country, name, de
 }
 
 func upsertProduct(ctx context.Context, db *sql.DB, id *string, country, lenderID, name, desc, mtype string,
-	minLoan, maxLoan, rate float64, rateType string, tenor int, equity, minIncome float64, maxAge int,
+	minLoan, maxLoan, rate, rateMin, rateMax float64, rateType string, tenor int, equity, minIncome float64, maxAge int,
 	source, sourceURL, vstatus string, verifiedAt *time.Time) error {
 	var verified sql.NullTime
 	if verifiedAt != nil {
@@ -288,19 +288,20 @@ func upsertProduct(ctx context.Context, db *sql.DB, id *string, country, lenderI
 	if err == nil {
 		_, err = db.ExecContext(ctx, `
 			UPDATE mortgage_products SET description=$2, mortgage_type=$3, min_loan_amount=$4, max_loan_amount=$5,
-			interest_rate=$6, interest_rate_type=$7, max_tenor_years=$8, min_equity_pct=$9, min_income=$10, max_age=$11,
-			source=NULLIF($12,''), source_url=NULLIF($13,''), verification_status=$14::verification_status, last_verified_at=$15, country_code=$16, updated_at=NOW()
-			WHERE id=$1::uuid`, *id, desc, mtype, minLoan, maxLoan, rate, rateType, tenor, equity, minIncome, maxAge, source, sourceURL, vstatus, verified, country)
+			interest_rate=$6, interest_rate_min=$7, interest_rate_max=$8, interest_rate_type=$9,
+			max_tenor_years=$10, min_equity_pct=$11, min_income=$12, max_age=$13,
+			source=NULLIF($14,''), source_url=NULLIF($15,''), verification_status=$16::verification_status, last_verified_at=$17, country_code=$18, updated_at=NOW()
+			WHERE id=$1::uuid`, *id, desc, mtype, minLoan, maxLoan, rate, rateMin, rateMax, rateType, tenor, equity, minIncome, maxAge, source, sourceURL, vstatus, verified, country)
 		return err
 	}
 	return db.QueryRowContext(ctx, `
 		INSERT INTO mortgage_products (
 			lender_id, name, description, mortgage_type, min_loan_amount, max_loan_amount,
-			interest_rate, interest_rate_type, max_tenor_years, min_equity_pct, min_income, max_age,
+			interest_rate, interest_rate_min, interest_rate_max, interest_rate_type, max_tenor_years, min_equity_pct, min_income, max_age,
 			source, source_url, verification_status, last_verified_at, country_code
-		) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NULLIF($13,''),NULLIF($14,''),$15::verification_status,$16,$17)
+		) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NULLIF($15,''),NULLIF($16,''),$17::verification_status,$18,$19)
 		RETURNING id::text
-	`, lenderID, name, desc, mtype, minLoan, maxLoan, rate, rateType, tenor, equity, minIncome, maxAge, source, sourceURL, vstatus, verified, country).Scan(id)
+	`, lenderID, name, desc, mtype, minLoan, maxLoan, rate, rateMin, rateMax, rateType, tenor, equity, minIncome, maxAge, source, sourceURL, vstatus, verified, country).Scan(id)
 }
 
 type ruleSeed struct {

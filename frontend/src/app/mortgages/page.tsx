@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
+import { formatRate } from "@/lib/rates";
 
 type Product = {
   id: string;
@@ -13,6 +14,8 @@ type Product = {
   name: string;
   description: string;
   interest_rate: number | null;
+  interest_rate_min: number | null;
+  interest_rate_max: number | null;
   interest_rate_type: string;
   max_tenor_years: number | null;
   min_equity_pct: number | null;
@@ -58,7 +61,7 @@ export default function MortgagesPage() {
       <main className="mx-auto max-w-6xl px-5 py-10 pb-20">
         <h1 className="font-[family-name:var(--font-display)] text-4xl font-semibold">Mortgage options</h1>
         <p className="mt-3 max-w-2xl text-muted">
-          Compare mortgage products in {country?.name || "your market"}. Every rate shows when it was last verified. HomeGauge is not a lender.
+          Compare mortgage products in {country?.name || "your market"}. Bands are negotiable ranges, not a personal offer. Every rate shows when it was last verified. HomeGauge is not a lender.
         </p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -98,7 +101,7 @@ export default function MortgagesPage() {
                 </div>
                 <p className="mt-3 line-clamp-3 text-sm text-muted">{p.description}</p>
                 <dl className="mt-4 space-y-2 text-sm">
-                  <Row label="Interest rate" value={p.interest_rate != null ? `${p.interest_rate}% ${p.interest_rate_type}` : "—"} />
+                  <Row label="Interest rate" value={formatRate(p)} />
                   <Row label="Max years to repay" value={p.max_tenor_years ? `${p.max_tenor_years} years` : "—"} />
                   <Row label="Typical deposit (equity)" value={p.min_equity_pct != null ? `${p.min_equity_pct}%` : "—"} />
                   <Row label="Min income" value={money(p.min_income)} />

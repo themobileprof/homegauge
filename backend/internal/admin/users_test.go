@@ -52,7 +52,33 @@ func TestValidateProductWrite(t *testing.T) {
 	if msg == "" {
 		t.Fatal("expected min>max error")
 	}
+	rateMin, rateMax, indicative := 20.0, 18.0, 30.0
+	msg = validateProductWrite(productWrite{
+		LenderID: "11111111-1111-1111-1111-111111111111", CountryCode: "NG", Name: "X",
+		MortgageType: "commercial", InterestRateMin: &rateMin, InterestRateMax: &rateMax,
+	})
+	if msg != "Minimum rate cannot be greater than maximum rate." {
+		t.Fatalf("min>max rate: got %q", msg)
+	}
+	rateMax = 26
+	msg = validateProductWrite(productWrite{
+		LenderID: "11111111-1111-1111-1111-111111111111", CountryCode: "NG", Name: "X",
+		MortgageType: "commercial", InterestRate: &indicative, InterestRateMin: &rateMin, InterestRateMax: &rateMax,
+	})
+	if msg != "Indicative rate must sit inside the min–max band." {
+		t.Fatalf("outside band: got %q", msg)
+	}
+	msg = validateProductWrite(productWrite{
+		LenderID: "11111111-1111-1111-1111-111111111111", CountryCode: "NG", Name: "X",
+		MortgageType: "commercial", InterestRateMin: &rateMin,
+	})
+	if msg != "Set both a minimum and maximum rate, or leave the band empty." {
+		t.Fatalf("half band: got %q", msg)
+	}
 	if !validMortgageType("nhf") || validMortgageType("weird") {
 		t.Fatal("mortgage type")
+	}
+	if !validRateType("negotiable") || validRateType("floating") {
+		t.Fatal("rate type")
 	}
 }

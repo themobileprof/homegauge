@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api, outcomeLabel } from "@/lib/api";
 import { useCountry } from "@/lib/country";
+import { formatRate } from "@/lib/rates";
 
 type Result = {
   product_id: string;
@@ -14,6 +15,9 @@ type Result = {
   explanation: string;
   estimated_monthly_repayment: number | null;
   interest_rate: number | null;
+  interest_rate_min: number | null;
+  interest_rate_max: number | null;
+  interest_rate_type: string;
   min_equity_pct: number | null;
   verification_status: string;
   last_verified_at: string | null;
@@ -97,7 +101,7 @@ export default function ResultsPage() {
             </div>
             <p className="mt-3 text-sm text-muted">{r.explanation}</p>
             <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
-              <div>Rate: <strong>{r.interest_rate != null ? `${r.interest_rate}%` : "—"}</strong></div>
+              <div>Rate: <strong>{formatRate(r)}</strong></div>
               <div>Equity: <strong>{r.min_equity_pct != null ? `${r.min_equity_pct}%` : "—"}</strong></div>
               <div>Est. monthly: <strong>{money(r.estimated_monthly_repayment)}</strong></div>
             </dl>

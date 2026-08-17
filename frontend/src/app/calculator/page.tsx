@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
+import { clampRate, formatRate, headlineRate, isNegotiableRate } from "@/lib/rates";
 
 type Result = {
   loan_amount: number;
@@ -22,6 +23,8 @@ type Product = {
   name: string;
   lender_name: string;
   interest_rate: number | null;
+  interest_rate_min: number | null;
+  interest_rate_max: number | null;
   interest_rate_type: string;
   max_tenor_years: number | null;
   min_equity_pct: number | null;
@@ -48,7 +51,7 @@ export default function CalculatorPage() {
   const [loading, setLoading] = useState(false);
 
   const selected = useMemo(() => products.find((p) => p.id === productId) || null, [products, productId]);
-  const rateLocked = selected?.interest_rate != null;
+  const rateLocked = !!selected && headlineRate(selected) != null && !isNegotiableRate(selected);
   const tenorLocked = selected?.max_tenor_years != null;
   const depositLocked = selected?.min_equity_pct != null;
 
@@ -68,7 +71,8 @@ export default function CalculatorPage() {
 
   useEffect(() => {
     if (!selected) return;
-    if (selected.interest_rate != null) setRate(selected.interest_rate);
+    const h = headlineRate(selected);
+    if (h != null) setRate(clampRate(h, selected));
     if (selected.max_tenor_years != null) setTenor(selected.max_tenor_years);
     setResult(null);
   }, [selected]);
@@ -88,7 +92,7 @@ export default function CalculatorPage() {
           property_price: propertyPrice,
           deposit,
           loan_amount: loanPreview,
-          interest_rate: rate,
+          interest_rate: selected ? clampRate(rate, selected) : rate,
           tenor_years: tenor,
           monthly_income: income,
           existing_monthly_debt: debt,
@@ -119,7 +123,7 @@ export default function CalculatorPage() {
         <section>
           <h1 className="font-[family-name:var(--font-display)] text-4xl font-semibold">Affordability calculator</h1>
           <p className="mt-3 text-muted">
-            Estimates only. Pick a product in {country?.name || "your market"} to lock its published rate, tenor, and minimum equity — or enter terms yourself.
+            Estimates only. Pick a product in {country?.name || "your market"} to fill its published terms. A single published rate stays locked; a negotiable band can be adjusted within the stated range. Tenor and minimum equity still lock when the product states them.
           </p>
 
           <div className="mt-8 space-y-4">
@@ -135,7 +139,7 @@ export default function CalculatorPage() {
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.lender_name} — {p.name}
-                    {p.interest_rate != null ? ` (${p.interest_rate}%)` : ""}
+                    {formatRate(p) !== "—" ? ` (${formatRate(p)})` : ""}
                   </option>
                 ))}
               </select>
@@ -145,8 +149,11 @@ export default function CalculatorPage() {
               )}
               {selected && (
                 <p className="mt-1 text-xs text-muted">
-                  Using {selected.name}. Rate, tenor, and minimum equity come from the product
-                  {selected.verification_status === "verified" ? " and were marked verified" : " and still need verification"}.
+                  Using {selected.name}. {formatRate(selected)}.
+                  {selected.verification_status === "verified" ? " Marked verified." : " Still needs verification."}
+                  {isNegotiableRate(selected)
+                    ? " The lender sets the actual rate — this estimate is not an offer."
+                    : ""}
                 </p>
               )}
             </label>
@@ -170,13 +177,15 @@ export default function CalculatorPage() {
             <Field
               label="Interest rate (% per year)"
               value={rate}
-              onChange={setRate}
+              onChange={(n) => setRate(selected ? clampRate(n, selected) : n)}
               step={0.25}
               readOnly={rateLocked}
               hint={
                 rateLocked
-                  ? `Locked to ${selected?.name} (${selected?.interest_rate_type || "stated"} rate).`
-                  : undefined
+                  ? `Locked to ${selected?.name} (${formatRate(selected)}).`
+                  : selected && isNegotiableRate(selected)
+                    ? `Pre-filled at ${headlineRate(selected)}%. Adjust within ${formatRate(selected)}. The lender sets the actual rate.`
+                    : undefined
               }
             />
             <Field

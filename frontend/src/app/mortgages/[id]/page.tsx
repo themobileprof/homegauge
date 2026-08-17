@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
+import { formatRate, isNegotiableRate } from "@/lib/rates";
 
 type Product = {
   id: string;
@@ -12,6 +13,8 @@ type Product = {
   name: string;
   description: string;
   interest_rate: number | null;
+  interest_rate_min: number | null;
+  interest_rate_max: number | null;
   interest_rate_type: string;
   max_tenor_years: number | null;
   min_equity_pct: number | null;
@@ -48,13 +51,18 @@ export default function ProductDetailPage() {
           <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl font-semibold">{product.name}</h1>
           <p className="mt-4 text-muted leading-relaxed">{product.description}</p>
           <dl className="mt-8 grid gap-3 sm:grid-cols-2">
-            <Stat label="Interest rate" value={product.interest_rate != null ? `${product.interest_rate}% ${product.interest_rate_type}` : "—"} />
+            <Stat label="Interest rate" value={formatRate(product)} />
             <Stat label="Max tenor" value={product.max_tenor_years ? `${product.max_tenor_years} years` : "—"} />
             <Stat label="Min equity" value={product.min_equity_pct != null ? `${product.min_equity_pct}%` : "—"} />
             <Stat label="Min income" value={money(product.min_income)} />
             <Stat label="Loan size" value={`${money(product.min_loan_amount)} – ${money(product.max_loan_amount)}`} />
             <Stat label="Verification" value={`${product.verification_status}${product.last_verified_at ? ` · ${new Date(product.last_verified_at).toLocaleDateString(country?.locale || "en")}` : ""}`} />
           </dl>
+          {isNegotiableRate(product) && (
+            <p className="mt-3 text-xs text-muted">
+              This is a stated band, not a personal offer. The lender sets the actual rate after underwriting.
+            </p>
+          )}
           {product.source_url && (
             <p className="mt-4 text-xs text-muted">
               Source: <a className="underline" href={product.source_url} target="_blank" rel="noreferrer">{product.source || product.source_url}</a>

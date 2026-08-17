@@ -39,6 +39,8 @@ type Product struct {
 	MaxTenorYears             *int              `json:"max_tenor_years"`
 	MinEquityPct              *float64          `json:"min_equity_pct"`
 	InterestRate              *float64          `json:"interest_rate"`
+	InterestRateMin           *float64          `json:"interest_rate_min"`
+	InterestRateMax           *float64          `json:"interest_rate_max"`
 	InterestRateType          string            `json:"interest_rate_type"`
 	RepaymentFrequency        string            `json:"repayment_frequency"`
 	ProcessingFee             *float64          `json:"processing_fee"`
@@ -126,7 +128,7 @@ func (s *Service) ListProducts(ctx context.Context, countryCode string) ([]Produ
 	q := `
 		SELECT p.id, p.country_code, c.currency_code, p.lender_id, l.name, p.name, p.description, p.mortgage_type,
 			p.min_loan_amount, p.max_loan_amount, p.min_income, p.max_age, p.max_tenor_years,
-			p.min_equity_pct, p.interest_rate, p.interest_rate_type, p.repayment_frequency,
+			p.min_equity_pct, p.interest_rate, p.interest_rate_min, p.interest_rate_max, p.interest_rate_type, p.repayment_frequency,
 			p.processing_fee, p.valuation_fee, p.legal_fee, p.insurance_requirements,
 			p.acceptable_employment_types, p.property_requirements, p.status,
 			p.source, p.source_url, p.verification_status, p.last_verified_at
@@ -162,7 +164,7 @@ func (s *Service) GetProduct(ctx context.Context, id uuid.UUID) (*Product, error
 	row := s.db.QueryRowContext(ctx, `
 		SELECT p.id, p.country_code, c.currency_code, p.lender_id, l.name, p.name, p.description, p.mortgage_type,
 			p.min_loan_amount, p.max_loan_amount, p.min_income, p.max_age, p.max_tenor_years,
-			p.min_equity_pct, p.interest_rate, p.interest_rate_type, p.repayment_frequency,
+			p.min_equity_pct, p.interest_rate, p.interest_rate_min, p.interest_rate_max, p.interest_rate_type, p.repayment_frequency,
 			p.processing_fee, p.valuation_fee, p.legal_fee, p.insurance_requirements,
 			p.acceptable_employment_types, p.property_requirements, p.status,
 			p.source, p.source_url, p.verification_status, p.last_verified_at
@@ -247,6 +249,7 @@ func scanProduct(row scannable) (Product, error) {
 	var p Product
 	var (
 		minLoan, maxLoan, minIncome, minEquity, rate sql.NullFloat64
+		rateMin, rateMax                             sql.NullFloat64
 		proc, val, legal                             sql.NullFloat64
 		maxAge, maxTenor                             sql.NullInt64
 		ins, prop, source, sourceURL                 sql.NullString
@@ -256,7 +259,7 @@ func scanProduct(row scannable) (Product, error) {
 	err := row.Scan(
 		&p.ID, &p.CountryCode, &p.CurrencyCode, &p.LenderID, &p.LenderName, &p.Name, &p.Description, &p.MortgageType,
 		&minLoan, &maxLoan, &minIncome, &maxAge, &maxTenor,
-		&minEquity, &rate, &p.InterestRateType, &p.RepaymentFrequency,
+		&minEquity, &rate, &rateMin, &rateMax, &p.InterestRateType, &p.RepaymentFrequency,
 		&proc, &val, &legal, &ins,
 		&empTypes, &prop, &p.Status,
 		&source, &sourceURL, &p.VerificationStatus, &verified,
@@ -269,6 +272,8 @@ func scanProduct(row scannable) (Product, error) {
 	p.MinIncome = nullF(minIncome)
 	p.MinEquityPct = nullF(minEquity)
 	p.InterestRate = nullF(rate)
+	p.InterestRateMin = nullF(rateMin)
+	p.InterestRateMax = nullF(rateMax)
 	p.ProcessingFee = nullF(proc)
 	p.ValuationFee = nullF(val)
 	p.LegalFee = nullF(legal)

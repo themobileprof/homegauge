@@ -34,7 +34,7 @@ Sessions: httpOnly cookie `homegauge_session` (credentials included).
 | GET | `/mortgage-products/:id` |
 | POST | `/mortgage-products/compare` |
 
-Products and lenders are scoped by `country_code`. Assessments store `country_code` and only evaluate products in that market.
+Products and lenders are scoped by `country_code`. Assessments store `country_code` and only evaluate products in that market. Product payloads include `interest_rate` (indicative/headline), optional `interest_rate_min` / `interest_rate_max` (a published band), and `interest_rate_type` (`fixed`, `variable`, or `negotiable`).
 
 ## Eligibility (authenticated)
 
@@ -88,7 +88,7 @@ Create body: `{ email, password, full_name, role }`. Role is `CUSTOMER`, `ADVISO
 
 Update body (all optional): `{ full_name, role, status, password }`. Status is `active` or `disabled`. You cannot disable, demote, or delete your own account, and the last active admin cannot be removed.
 
-Product create/update body: `{ lender_id, country_code, name, mortgage_type, description, interest_rate, interest_rate_type, min_loan_amount, max_loan_amount, min_income, min_equity_pct, max_tenor_years, max_age, fees, status, verification_status, source, source_url, sync_rules }`. `mortgage_type` is `nhf`, `mreif`, `commercial`, `scheme`, or `other`. Status is `active` or `inactive`. Verification is `verified`, `needs_verification`, or `expired`. Saving with `sync_rules` (default true) updates eligibility rules for income, age, equity, and loan size. New products also get a default document checklist.
+Product create/update body: `{ lender_id, country_code, name, mortgage_type, description, interest_rate, interest_rate_min, interest_rate_max, interest_rate_type, min_loan_amount, max_loan_amount, min_income, min_equity_pct, max_tenor_years, max_age, fees, status, verification_status, source, source_url, sync_rules }`. `mortgage_type` is `nhf`, `mreif`, `commercial`, `scheme`, or `other`. `interest_rate` is the indicative/headline figure used in estimates. Optional `interest_rate_min` / `interest_rate_max` are a published band (set both or neither; indicative must sit inside). `interest_rate_type` is `fixed`, `variable`, or `negotiable`. A true band or `negotiable` is shown as a range, not a locked offer. Status is `active` or `inactive`. Verification is `verified`, `needs_verification`, or `expired`. Saving with `sync_rules` (default true) updates eligibility rules for income, age, equity, and loan size. New products also get a default document checklist. Rate is not an eligibility hard rule.
 
 Lender create body: `{ name, country_code, description, website }`.
 

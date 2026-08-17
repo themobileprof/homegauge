@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
+import { formatRate } from "@/lib/rates";
 
 type Product = {
   id: string;
@@ -20,6 +21,8 @@ type Product = {
   max_tenor_years: number | null;
   min_equity_pct: number | null;
   interest_rate: number | null;
+  interest_rate_min: number | null;
+  interest_rate_max: number | null;
   interest_rate_type: string;
   processing_fee: number | null;
   valuation_fee: number | null;
@@ -53,6 +56,8 @@ const emptyForm = {
   country_code: "NG",
   mortgage_type: "commercial",
   interest_rate: "",
+  interest_rate_min: "",
+  interest_rate_max: "",
   interest_rate_type: "fixed",
   min_loan_amount: "",
   max_loan_amount: "",
@@ -155,6 +160,8 @@ export default function AdminProductsPage() {
       country_code: p.country_code,
       mortgage_type: TYPES.some((t) => t.value === p.mortgage_type) ? p.mortgage_type : "other",
       interest_rate: strNum(p.interest_rate),
+      interest_rate_min: strNum(p.interest_rate_min),
+      interest_rate_max: strNum(p.interest_rate_max),
       interest_rate_type: p.interest_rate_type || "fixed",
       min_loan_amount: strNum(p.min_loan_amount),
       max_loan_amount: strNum(p.max_loan_amount),
@@ -188,6 +195,8 @@ export default function AdminProductsPage() {
       country_code: form.country_code,
       mortgage_type: form.mortgage_type,
       interest_rate: numOrNull(form.interest_rate),
+      interest_rate_min: numOrNull(form.interest_rate_min),
+      interest_rate_max: numOrNull(form.interest_rate_max),
       interest_rate_type: form.interest_rate_type,
       min_loan_amount: numOrNull(form.min_loan_amount),
       max_loan_amount: numOrNull(form.max_loan_amount),
@@ -395,9 +404,15 @@ export default function AdminProductsPage() {
               >
                 <option value="fixed">Fixed</option>
                 <option value="variable">Variable</option>
+                <option value="negotiable">Negotiable</option>
               </select>
             </label>
-            <NumField label="Interest rate % p.a." value={form.interest_rate} onChange={(v) => setForm((f) => ({ ...f, interest_rate: v }))} />
+            <NumField label="Indicative rate % p.a." value={form.interest_rate} onChange={(v) => setForm((f) => ({ ...f, interest_rate: v }))} />
+            <NumField label="Min rate % p.a." value={form.interest_rate_min} onChange={(v) => setForm((f) => ({ ...f, interest_rate_min: v }))} />
+            <NumField label="Max rate % p.a." value={form.interest_rate_max} onChange={(v) => setForm((f) => ({ ...f, interest_rate_max: v }))} />
+            <p className="sm:col-span-2 text-xs text-muted">
+              Use the same figure for indicative, min, and max when the lender publishes one rate (e.g. NHF 6%). For a commercial band, set min–max and type Negotiable — the calculator will pre-fill but not lock.
+            </p>
             <NumField label="Min equity %" value={form.min_equity_pct} onChange={(v) => setForm((f) => ({ ...f, min_equity_pct: v }))} />
             <NumField label="Min loan amount" value={form.min_loan_amount} onChange={(v) => setForm((f) => ({ ...f, min_loan_amount: v }))} />
             <NumField label="Max loan amount" value={form.max_loan_amount} onChange={(v) => setForm((f) => ({ ...f, max_loan_amount: v }))} />
@@ -502,7 +517,7 @@ export default function AdminProductsPage() {
                 </td>
                 <td className="px-4 py-3">{p.lender_name}</td>
                 <td className="px-4 py-3">
-                  {p.interest_rate != null ? `${p.interest_rate}% ${p.interest_rate_type}` : "—"}
+                  {formatRate(p)}
                   <div className="text-xs text-muted">
                     {p.min_equity_pct != null ? `${p.min_equity_pct}% equity` : "equity n/a"}
                     {p.max_loan_amount != null ? ` · up to ${money(p.max_loan_amount)}` : ""}

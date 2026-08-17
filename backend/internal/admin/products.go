@@ -39,6 +39,8 @@ type adminProduct struct {
 	MaxTenorYears      *int       `json:"max_tenor_years"`
 	MinEquityPct       *float64   `json:"min_equity_pct"`
 	InterestRate       *float64   `json:"interest_rate"`
+	InterestRateMin    *float64   `json:"interest_rate_min"`
+	InterestRateMax    *float64   `json:"interest_rate_max"`
 	InterestRateType   string     `json:"interest_rate_type"`
 	ProcessingFee      *float64   `json:"processing_fee"`
 	ValuationFee       *float64   `json:"valuation_fee"`
@@ -64,6 +66,8 @@ type productWrite struct {
 	MaxTenorYears      *int     `json:"max_tenor_years"`
 	MinEquityPct       *float64 `json:"min_equity_pct"`
 	InterestRate       *float64 `json:"interest_rate"`
+	InterestRateMin    *float64 `json:"interest_rate_min"`
+	InterestRateMax    *float64 `json:"interest_rate_max"`
 	InterestRateType   string   `json:"interest_rate_type"`
 	ProcessingFee      *float64 `json:"processing_fee"`
 	ValuationFee       *float64 `json:"valuation_fee"`
@@ -85,7 +89,7 @@ type lenderWrite struct {
 const productSelect = `
 	SELECT p.id::text, p.country_code, c.currency_code, p.lender_id::text, l.name, p.name, p.description, p.mortgage_type,
 		p.min_loan_amount, p.max_loan_amount, p.min_income, p.max_age, p.max_tenor_years,
-		p.min_equity_pct, p.interest_rate, p.interest_rate_type,
+		p.min_equity_pct, p.interest_rate, p.interest_rate_min, p.interest_rate_max, p.interest_rate_type,
 		p.processing_fee, p.valuation_fee, p.legal_fee, p.status,
 		p.source, p.source_url, p.verification_status, p.last_verified_at, p.updated_at
 	FROM mortgage_products p
@@ -203,18 +207,18 @@ func (h *Handler) CreateProduct(c *gin.Context) {
 		INSERT INTO mortgage_products (
 			lender_id, country_code, name, description, mortgage_type,
 			min_loan_amount, max_loan_amount, min_income, max_age, max_tenor_years, min_equity_pct,
-			interest_rate, interest_rate_type, processing_fee, valuation_fee, legal_fee,
+			interest_rate, interest_rate_min, interest_rate_max, interest_rate_type, processing_fee, valuation_fee, legal_fee,
 			status, source, source_url, verification_status, last_verified_at
 		) VALUES (
 			$1::uuid, $2, $3, $4, $5,
 			$6, $7, $8, $9, $10, $11,
-			$12, $13, $14, $15, $16,
-			$17, NULLIF($18,''), NULLIF($19,''), $20::verification_status,
-			CASE WHEN $20::text = 'verified' THEN NOW() ELSE NULL END
+			$12, $13, $14, $15, $16, $17, $18,
+			$19, NULLIF($20,''), NULLIF($21,''), $22::verification_status,
+			CASE WHEN $22::text = 'verified' THEN NOW() ELSE NULL END
 		) RETURNING id::text
 	`, in.LenderID, strings.ToUpper(in.CountryCode), strings.TrimSpace(in.Name), strings.TrimSpace(in.Description), in.MortgageType,
 		in.MinLoanAmount, in.MaxLoanAmount, in.MinIncome, in.MaxAge, in.MaxTenorYears, in.MinEquityPct,
-		in.InterestRate, defaultRateType(in.InterestRateType), in.ProcessingFee, in.ValuationFee, in.LegalFee,
+		in.InterestRate, in.InterestRateMin, in.InterestRateMax, defaultRateType(in.InterestRateType), in.ProcessingFee, in.ValuationFee, in.LegalFee,
 		defaultProductStatus(in.Status), strings.TrimSpace(in.Source), strings.TrimSpace(in.SourceURL), defaultVerification(in.VerificationStatus),
 	).Scan(&id)
 	if err != nil {
@@ -274,18 +278,18 @@ func (h *Handler) UpdateProduct(c *gin.Context) {
 		UPDATE mortgage_products SET
 			lender_id=$2::uuid, country_code=$3, name=$4, description=$5, mortgage_type=$6,
 			min_loan_amount=$7, max_loan_amount=$8, min_income=$9, max_age=$10, max_tenor_years=$11, min_equity_pct=$12,
-			interest_rate=$13, interest_rate_type=$14, processing_fee=$15, valuation_fee=$16, legal_fee=$17,
-			status=$18, source=NULLIF($19,''), source_url=NULLIF($20,''),
-			verification_status=$21::verification_status,
+			interest_rate=$13, interest_rate_min=$14, interest_rate_max=$15, interest_rate_type=$16, processing_fee=$17, valuation_fee=$18, legal_fee=$19,
+			status=$20, source=NULLIF($21,''), source_url=NULLIF($22,''),
+			verification_status=$23::verification_status,
 			last_verified_at = CASE
-				WHEN $21::text = 'verified' THEN NOW()
+				WHEN $23::text = 'verified' THEN NOW()
 				ELSE last_verified_at
 			END,
 			updated_at=NOW()
 		WHERE id=$1::uuid AND deleted_at IS NULL
 	`, id, in.LenderID, strings.ToUpper(in.CountryCode), strings.TrimSpace(in.Name), strings.TrimSpace(in.Description), in.MortgageType,
 		in.MinLoanAmount, in.MaxLoanAmount, in.MinIncome, in.MaxAge, in.MaxTenorYears, in.MinEquityPct,
-		in.InterestRate, defaultRateType(in.InterestRateType), in.ProcessingFee, in.ValuationFee, in.LegalFee,
+		in.InterestRate, in.InterestRateMin, in.InterestRateMax, defaultRateType(in.InterestRateType), in.ProcessingFee, in.ValuationFee, in.LegalFee,
 		defaultProductStatus(in.Status), strings.TrimSpace(in.Source), strings.TrimSpace(in.SourceURL), defaultVerification(in.VerificationStatus),
 	)
 	if err != nil {
@@ -490,6 +494,7 @@ func scanAdminProduct(row scannable) (adminProduct, error) {
 	var p adminProduct
 	var (
 		minLoan, maxLoan, minIncome, minEquity, rate sql.NullFloat64
+		rateMin, rateMax                             sql.NullFloat64
 		proc, val, legal                             sql.NullFloat64
 		maxAge, maxTenor                             sql.NullInt64
 		source, sourceURL                            sql.NullString
@@ -498,7 +503,7 @@ func scanAdminProduct(row scannable) (adminProduct, error) {
 	err := row.Scan(
 		&p.ID, &p.CountryCode, &p.CurrencyCode, &p.LenderID, &p.LenderName, &p.Name, &p.Description, &p.MortgageType,
 		&minLoan, &maxLoan, &minIncome, &maxAge, &maxTenor,
-		&minEquity, &rate, &p.InterestRateType,
+		&minEquity, &rate, &rateMin, &rateMax, &p.InterestRateType,
 		&proc, &val, &legal, &p.Status,
 		&source, &sourceURL, &p.VerificationStatus, &verified, &p.UpdatedAt,
 	)
@@ -510,6 +515,8 @@ func scanAdminProduct(row scannable) (adminProduct, error) {
 	p.MinIncome = nullF(minIncome)
 	p.MinEquityPct = nullF(minEquity)
 	p.InterestRate = nullF(rate)
+	p.InterestRateMin = nullF(rateMin)
+	p.InterestRateMax = nullF(rateMax)
 	p.ProcessingFee = nullF(proc)
 	p.ValuationFee = nullF(val)
 	p.LegalFee = nullF(legal)
@@ -545,16 +552,27 @@ func validateProductWrite(in productWrite) string {
 		return "Mortgage type must be nhf, mreif, commercial, scheme, or other."
 	}
 	if in.InterestRateType != "" && !validRateType(in.InterestRateType) {
-		return "Interest rate type must be fixed or variable."
+		return "Interest rate type must be fixed, variable, or negotiable."
+	}
+	if (in.InterestRateMin == nil) != (in.InterestRateMax == nil) {
+		return "Set both a minimum and maximum rate, or leave the band empty."
+	}
+	if in.InterestRateMin != nil && in.InterestRateMax != nil && *in.InterestRateMin > *in.InterestRateMax {
+		return "Minimum rate cannot be greater than maximum rate."
+	}
+	if in.InterestRate != nil && in.InterestRateMin != nil && in.InterestRateMax != nil {
+		if *in.InterestRate < *in.InterestRateMin || *in.InterestRate > *in.InterestRateMax {
+			return "Indicative rate must sit inside the min–max band."
+		}
+	}
+	if in.MinLoanAmount != nil && in.MaxLoanAmount != nil && *in.MinLoanAmount > *in.MaxLoanAmount {
+		return "Minimum loan cannot be greater than maximum loan."
 	}
 	if in.Status != "" && !validProductStatus(in.Status) {
 		return "Status must be active or inactive."
 	}
 	if in.VerificationStatus != "" && !validVerification(in.VerificationStatus) {
 		return "Verification must be verified, needs_verification, or expired."
-	}
-	if in.MinLoanAmount != nil && in.MaxLoanAmount != nil && *in.MinLoanAmount > *in.MaxLoanAmount {
-		return "Minimum loan cannot be greater than maximum loan."
 	}
 	return ""
 }
@@ -569,7 +587,7 @@ func validMortgageType(v string) bool {
 }
 
 func validRateType(v string) bool {
-	return v == "fixed" || v == "variable"
+	return v == "fixed" || v == "variable" || v == "negotiable"
 }
 
 func validProductStatus(v string) bool {
