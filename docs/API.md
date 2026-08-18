@@ -81,6 +81,14 @@ ADMIN role only.
 | POST | `/admin/products` |
 | PATCH | `/admin/products/:id` |
 | DELETE | `/admin/products/:id` |
+| GET | `/admin/advisors` |
+| GET | `/admin/cases` (`?unassigned=1`, `?advisor_id=`, `?status=`) |
+| GET | `/admin/cases/:id` |
+| POST | `/admin/cases/:id/assign` |
+| PATCH | `/admin/cases/:id/status` |
+| GET | `/admin/reports/advisors` |
+| GET | `/admin/reports/buyers` |
+| GET | `/admin/approvals` |
 | GET | `/admin/ping` |
 | GET | `/admin/ai-status` |
 
@@ -92,7 +100,13 @@ Product create/update body: `{ lender_id, country_code, name, mortgage_type, des
 
 Lender create body: `{ name, country_code, description, website }`.
 
+Case assignment body: `{ advisor_id }`. Target must be an active `ADVISOR`. Status body: `{ status, next_action_text }`. Admin may set any `application_status`. Overview also returns `unassigned_cases` and `ready_for_approval`.
+
+Advisors handle day-to-day case work. Admin case ops are assignment, status (including terminal outcomes), advisor/homebuyer reports, and a later-expanding approvals queue (today: cases in `READY_FOR_SUBMISSION`).
+
 ## Advisor
+
+ADVISOR role only. The queue is cases assigned to the signed-in advisor.
 
 | Method | Path |
 |--------|------|
@@ -104,7 +118,9 @@ Lender create body: `{ name, country_code, description, website }`.
 | POST | `/advisor/suggestions/:id/resolve` |
 | POST | `/advisor/documents/:id/review` |
 
+Advisor status is working-file only: `DOCUMENTS_PENDING`, `DOCUMENTS_UNDER_REVIEW`, `READY_FOR_SUBMISSION`, `SUBMITTED_TO_LENDER`, `LENDER_REVIEW`, `ADDITIONAL_INFORMATION_REQUIRED`. `APPROVED`, `REJECTED`, `COMPLETED`, and `CANCELLED` are admin.
+
 ## RBAC probes
 
 - `GET /api/v1/admin/ping` — ADMIN
-- `GET /api/v1/advisor/ping` — ADVISOR or ADMIN
+- `GET /api/v1/advisor/ping` — ADVISOR

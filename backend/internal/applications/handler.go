@@ -3,6 +3,7 @@ package applications
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -25,11 +26,21 @@ func (h *Handler) RegisterAdvisor(rg *gin.RouterGroup) {
 	rg.GET("/cases", h.ListCases)
 	rg.GET("/cases/:id", h.GetCase)
 	rg.PATCH("/cases/:id/status", h.UpdateStatus)
-	rg.POST("/cases/:id/assign", h.Assign)
 	rg.POST("/cases/:id/notes", h.AddNote)
 	rg.GET("/cases/:id/notes", h.ListNotes)
 	rg.GET("/cases/:id/suggestions", h.ListSuggestions)
 	rg.POST("/suggestions/:id/resolve", h.ResolveSuggestion)
+}
+
+func (h *Handler) RegisterAdmin(rg *gin.RouterGroup) {
+	rg.GET("/cases", h.AdminListCases)
+	rg.GET("/cases/:id", h.AdminGetCase)
+	rg.PATCH("/cases/:id/status", h.AdminUpdateStatus)
+	rg.POST("/cases/:id/assign", h.AdminAssign)
+	rg.GET("/advisors", h.ListAdvisors)
+	rg.GET("/reports/advisors", h.ReportAdvisors)
+	rg.GET("/reports/buyers", h.ReportBuyers)
+	rg.GET("/approvals", h.ListApprovals)
 }
 
 func (h *Handler) Mine(c *gin.Context) {
@@ -57,26 +68,29 @@ func (h *Handler) RequestAdvisor(c *gin.Context) {
 }
 
 func (h *Handler) ListCases(c *gin.Context) {
-	items, err := h.svc.ListCases(c.Request.Context())
+	user := c.MustGet("auth_user").(auth.SessionUser)
+	items, err := h.svc.ListAdvisorCases(c.Request.Context(), user.ID)
 	if err != nil {
 		httpx.Internal(c, "Could not load cases.")
 		return
-	}
-	if items == nil {
-		items = []Application{}
 	}
 	c.JSON(http.StatusOK, gin.H{"cases": items})
 }
 
 func (h *Handler) GetCase(c *gin.Context) {
+	user := c.MustGet("auth_user").(auth.SessionUser)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		httpx.BadRequest(c, "Invalid case id.")
 		return
 	}
-	app, err := h.svc.GetByID(c.Request.Context(), id)
+	app, err := h.svc.GetAdvisorCase(c.Request.Context(), user.ID, id)
 	if errors.Is(err, ErrNotFound) {
 		httpx.NotFound(c, "Case not found.")
+		return
+	}
+	if errors.Is(err, ErrForbidden) {
+		httpx.Forbidden(c, "This case is not assigned to you.")
 		return
 	}
 	if err != nil {
@@ -89,6 +103,17 @@ func (h *Handler) GetCase(c *gin.Context) {
 }
 
 func (h *Handler) UpdateStatus(c *gin.Context) {
+	if !h.requireAssigned(c) {
+		return
+	}
+	h.updateStatus(c, advisorWorkingStatuses, "Advisors can update working status only. An admin sets approved, rejected, completed, or cancelled.")
+}
+
+func (h *Handler) AdminUpdateStatus(c *gin.Context) {
+	h.updateStatus(c, allCaseStatuses, "Invalid status.")
+}
+
+func (h *Handler) updateStatus(c *gin.Context, allowed map[string]bool, invalidMsg string) {
 	user := c.MustGet("auth_user").(auth.SessionUser)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -103,9 +128,9 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 		httpx.BadRequest(c, "status is required.")
 		return
 	}
-	app, err := h.svc.UpdateStatus(c.Request.Context(), user.ID, id, body.Status, body.NextAction)
+	app, err := h.svc.UpdateStatus(c.Request.Context(), user.ID, id, body.Status, body.NextAction, allowed)
 	if errors.Is(err, ErrInvalid) {
-		httpx.BadRequest(c, "Invalid status.")
+		httpx.BadRequest(c, invalidMsg)
 		return
 	}
 	if err != nil {
@@ -115,33 +140,33 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"case": app})
 }
 
-func (h *Handler) Assign(c *gin.Context) {
+func (h *Handler) requireAssigned(c *gin.Context) bool {
 	user := c.MustGet("auth_user").(auth.SessionUser)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		httpx.BadRequest(c, "Invalid case id.")
-		return
+		return false
 	}
-	var body struct {
-		AdvisorID string `json:"advisor_id" binding:"required"`
+	_, err = h.svc.GetAdvisorCase(c.Request.Context(), user.ID, id)
+	if errors.Is(err, ErrNotFound) {
+		httpx.NotFound(c, "Case not found.")
+		return false
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		httpx.BadRequest(c, "advisor_id is required.")
-		return
+	if errors.Is(err, ErrForbidden) {
+		httpx.Forbidden(c, "This case is not assigned to you.")
+		return false
 	}
-	advisorID, err := uuid.Parse(body.AdvisorID)
 	if err != nil {
-		httpx.BadRequest(c, "Invalid advisor id.")
-		return
+		httpx.Internal(c, "Could not load case.")
+		return false
 	}
-	if err := h.svc.Assign(c.Request.Context(), user.ID, id, advisorID); err != nil {
-		httpx.Internal(c, "Could not assign advisor.")
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	return true
 }
 
 func (h *Handler) AddNote(c *gin.Context) {
+	if !h.requireAssigned(c) {
+		return
+	}
 	user := c.MustGet("auth_user").(auth.SessionUser)
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -165,6 +190,9 @@ func (h *Handler) AddNote(c *gin.Context) {
 }
 
 func (h *Handler) ListNotes(c *gin.Context) {
+	if !h.requireAssigned(c) {
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		httpx.BadRequest(c, "Invalid case id.")
@@ -179,6 +207,9 @@ func (h *Handler) ListNotes(c *gin.Context) {
 }
 
 func (h *Handler) ListSuggestions(c *gin.Context) {
+	if !h.requireAssigned(c) {
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		httpx.BadRequest(c, "Invalid case id.")
@@ -211,4 +242,124 @@ func (h *Handler) ResolveSuggestion(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *Handler) AdminListCases(c *gin.Context) {
+	q := CaseQuery{IncludeClosed: true, Limit: 200}
+	if c.Query("unassigned") == "1" || c.Query("assigned") == "unassigned" {
+		q.Unassigned = true
+	}
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		q.Status = status
+	}
+	if raw := strings.TrimSpace(c.Query("advisor_id")); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			httpx.BadRequest(c, "Invalid advisor id.")
+			return
+		}
+		q.AssignedTo = &id
+	}
+	items, err := h.svc.ListCases(c.Request.Context(), q)
+	if err != nil {
+		httpx.Internal(c, "Could not load cases.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cases": items})
+}
+
+func (h *Handler) AdminGetCase(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.BadRequest(c, "Invalid case id.")
+		return
+	}
+	app, err := h.svc.GetByID(c.Request.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		httpx.NotFound(c, "Case not found.")
+		return
+	}
+	if err != nil {
+		httpx.Internal(c, "Could not load case.")
+		return
+	}
+	notes, _ := h.svc.ListNotes(c.Request.Context(), id)
+	c.JSON(http.StatusOK, gin.H{"case": app, "notes": notes})
+}
+
+func (h *Handler) AdminAssign(c *gin.Context) {
+	user := c.MustGet("auth_user").(auth.SessionUser)
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.BadRequest(c, "Invalid case id.")
+		return
+	}
+	var body struct {
+		AdvisorID string `json:"advisor_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		httpx.BadRequest(c, "advisor_id is required.")
+		return
+	}
+	advisorID, err := uuid.Parse(body.AdvisorID)
+	if err != nil {
+		httpx.BadRequest(c, "Invalid advisor id.")
+		return
+	}
+	app, err := h.svc.Assign(c.Request.Context(), user.ID, id, advisorID)
+	if errors.Is(err, ErrNotFound) {
+		httpx.NotFound(c, "Case not found.")
+		return
+	}
+	if errors.Is(err, ErrInvalidAdvisor) {
+		httpx.BadRequest(c, "Choose an active advisor.")
+		return
+	}
+	if err != nil {
+		httpx.Internal(c, "Could not assign advisor.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"case": app})
+}
+
+func (h *Handler) ListAdvisors(c *gin.Context) {
+	items, err := h.svc.ListActiveAdvisors(c.Request.Context())
+	if err != nil {
+		httpx.Internal(c, "Could not load advisors.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"advisors": items})
+}
+
+func (h *Handler) ReportAdvisors(c *gin.Context) {
+	rows, sum, err := h.svc.ReportAdvisors(c.Request.Context())
+	if err != nil {
+		httpx.Internal(c, "Could not load advisor report.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"advisors": rows, "summary": sum})
+}
+
+func (h *Handler) ReportBuyers(c *gin.Context) {
+	rows, sum, err := h.svc.ReportBuyers(c.Request.Context())
+	if err != nil {
+		httpx.Internal(c, "Could not load homebuyer report.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"buyers": rows, "summary": sum})
+}
+
+func (h *Handler) ListApprovals(c *gin.Context) {
+	items, err := h.svc.ListCases(c.Request.Context(), CaseQuery{
+		Statuses: []string{"READY_FOR_SUBMISSION"},
+		Limit:    100,
+	})
+	if err != nil {
+		httpx.Internal(c, "Could not load approvals.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"cases": items,
+		"note":  "When an advisor marks a case ready for submission, it appears here for a top-level status decision. Exception and lender-offer approvals will be added later.",
+	})
 }

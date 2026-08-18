@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_mortgage_applications_assigned_advisor;

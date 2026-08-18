@@ -14,13 +14,13 @@ function itemsForRole(role?: Role | null): NavItem[] {
       { href: "/admin", label: "Overview" },
       { href: "/admin/users", label: "Users" },
       { href: "/admin/products", label: "Products" },
-      { href: "/advisor", label: "Cases" },
-      { href: "/calculator", label: "Calculator" },
+      { href: "/admin/cases", label: "Cases" },
+      { href: "/admin/reports", label: "Reports" },
     ];
   }
   if (role === "ADVISOR") {
     return [
-      { href: "/advisor", label: "Case queue" },
+      { href: "/advisor", label: "Your cases" },
       { href: "/mortgages", label: "Products" },
       { href: "/learn", label: "Guides" },
     ];

@@ -1,4 +1,7 @@
+ "use client";
+
 import Link from "next/link";
+import { homeForRole, useAuth } from "@/lib/auth";
 
 const guides = [
   {
@@ -20,6 +23,11 @@ const guides = [
 ];
 
 export default function LearnPage() {
+  const { user } = useAuth();
+  const isCustomer = !user || user.role === "CUSTOMER";
+  const primaryHref = isCustomer ? "/app/assessment" : homeForRole(user.role);
+  const primaryLabel = isCustomer ? "Check My Mortgage Eligibility" : "Back to your workspace";
+
   return (
     <div className="mx-auto max-w-3xl px-5 py-12">
       <h1 className="font-[family-name:var(--font-display)] text-4xl font-semibold">Learn</h1>
@@ -35,8 +43,8 @@ export default function LearnPage() {
         ))}
       </div>
       <div className="mt-12 flex flex-wrap gap-3">
-        <Link href="/app/assessment" className="rounded-md bg-leaf px-4 py-2.5 text-sm font-semibold text-white">
-          Check My Mortgage Eligibility
+        <Link href={primaryHref} className="rounded-md bg-leaf px-4 py-2.5 text-sm font-semibold text-white">
+          {primaryLabel}
         </Link>
         <Link href="/calculator" className="rounded-md border border-[color:var(--line)] px-4 py-2.5 text-sm font-semibold">
           Affordability calculator

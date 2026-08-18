@@ -13,9 +13,10 @@ import (
 )
 
 var (
-	ErrNotFound  = errors.New("not found")
-	ErrForbidden = errors.New("forbidden")
-	ErrInvalid   = errors.New("invalid status")
+	ErrNotFound       = errors.New("not found")
+	ErrForbidden      = errors.New("forbidden")
+	ErrInvalid        = errors.New("invalid status")
+	ErrInvalidAdvisor = errors.New("invalid advisor")
 )
 
 type Application struct {
@@ -26,8 +27,10 @@ type Application struct {
 	AssessmentID       *uuid.UUID `json:"assessment_id,omitempty"`
 	PreferredProductID *uuid.UUID `json:"preferred_product_id,omitempty"`
 	Status             string     `json:"status"`
-	AssignedAdvisorID  *uuid.UUID `json:"assigned_advisor_id,omitempty"`
-	NextActionText     string     `json:"next_action_text"`
+	AssignedAdvisorID    *uuid.UUID `json:"assigned_advisor_id,omitempty"`
+	AssignedAdvisorName  string     `json:"assigned_advisor_name,omitempty"`
+	AssignedAdvisorEmail string     `json:"assigned_advisor_email,omitempty"`
+	NextActionText       string     `json:"next_action_text"`
 	CreatedAt          time.Time  `json:"created_at"`
 	UpdatedAt          time.Time  `json:"updated_at"`
 }
@@ -353,37 +356,79 @@ func uniqueStrings(in []string) []string {
 	return out
 }
 
-func (s *Service) ListCases(ctx context.Context) ([]Application, error) {
-	rows, err := s.db.QueryContext(ctx, `
+type CaseQuery struct {
+	AssignedTo    *uuid.UUID
+	Unassigned    bool
+	Status        string
+	Statuses      []string
+	IncludeClosed bool
+	Limit         int
+}
+
+func (s *Service) ListAdvisorCases(ctx context.Context, advisorID uuid.UUID) ([]Application, error) {
+	return s.ListCases(ctx, CaseQuery{AssignedTo: &advisorID, Limit: 100})
+}
+
+func (s *Service) ListCases(ctx context.Context, q CaseQuery) ([]Application, error) {
+	limit := q.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 200
+	}
+	sqlStr := `
 		SELECT a.id, a.user_id, a.assessment_id::text, a.preferred_product_id::text, a.status,
 			a.assigned_advisor_id::text, a.next_action_text, a.created_at, a.updated_at,
-			u.email, COALESCE(p.full_name,'')
+			u.email, COALESCE(p.full_name,''),
+			COALESCE(advp.full_name,''), COALESCE(advu.email,'')
 		FROM mortgage_applications a
 		JOIN users u ON u.id = a.user_id
 		LEFT JOIN user_profiles p ON p.user_id = a.user_id
-		WHERE a.status NOT IN ('CANCELLED')
-		ORDER BY a.updated_at DESC
-		LIMIT 100
-	`)
+		LEFT JOIN users advu ON advu.id = a.assigned_advisor_id
+		LEFT JOIN user_profiles advp ON advp.user_id = a.assigned_advisor_id
+		WHERE 1=1`
+	args := []any{}
+	n := 1
+	if q.AssignedTo != nil {
+		sqlStr += fmt.Sprintf(` AND a.assigned_advisor_id = $%d`, n)
+		args = append(args, *q.AssignedTo)
+		n++
+	}
+	if q.Unassigned {
+		sqlStr += ` AND a.assigned_advisor_id IS NULL`
+	}
+	if q.Status != "" {
+		sqlStr += fmt.Sprintf(` AND a.status = $%d`, n)
+		args = append(args, q.Status)
+		n++
+	}
+	if len(q.Statuses) > 0 {
+		sqlStr += ` AND a.status IN (`
+		for i, st := range q.Statuses {
+			if i > 0 {
+				sqlStr += `,`
+			}
+			sqlStr += fmt.Sprintf(`$%d`, n)
+			args = append(args, st)
+			n++
+		}
+		sqlStr += `)`
+	}
+	if !q.IncludeClosed && q.Status == "" && len(q.Statuses) == 0 {
+		sqlStr += ` AND a.status NOT IN ('CANCELLED')`
+	}
+	sqlStr += fmt.Sprintf(` ORDER BY a.updated_at DESC LIMIT $%d`, n)
+	args = append(args, limit)
+
+	rows, err := s.db.QueryContext(ctx, sqlStr, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Application
+	out := []Application{}
 	for rows.Next() {
-		var (
-			a Application
-			assessment, preferred, advisor sql.NullString
-			email, name string
-		)
-		if err := rows.Scan(&a.ID, &a.UserID, &assessment, &preferred, &a.Status, &advisor, &a.NextActionText, &a.CreatedAt, &a.UpdatedAt, &email, &name); err != nil {
+		a, err := scanListedApp(rows)
+		if err != nil {
 			return nil, err
 		}
-		a.CustomerEmail = email
-		a.CustomerName = name
-		a.AssessmentID = parseNullUUID(assessment)
-		a.PreferredProductID = parseNullUUID(preferred)
-		a.AssignedAdvisorID = parseNullUUID(advisor)
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -393,37 +438,39 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*Application, erro
 	row := s.db.QueryRowContext(ctx, `
 		SELECT a.id, a.user_id, a.assessment_id::text, a.preferred_product_id::text, a.status,
 			a.assigned_advisor_id::text, a.next_action_text, a.created_at, a.updated_at,
-			u.email, COALESCE(p.full_name,'')
+			u.email, COALESCE(p.full_name,''),
+			COALESCE(advp.full_name,''), COALESCE(advu.email,'')
 		FROM mortgage_applications a
 		JOIN users u ON u.id = a.user_id
 		LEFT JOIN user_profiles p ON p.user_id = a.user_id
+		LEFT JOIN users advu ON advu.id = a.assigned_advisor_id
+		LEFT JOIN user_profiles advp ON advp.user_id = a.assigned_advisor_id
 		WHERE a.id=$1
 	`, id)
-	var (
-		a Application
-		assessment, preferred, advisor sql.NullString
-		email, name string
-	)
-	err := row.Scan(&a.ID, &a.UserID, &assessment, &preferred, &a.Status, &advisor, &a.NextActionText, &a.CreatedAt, &a.UpdatedAt, &email, &name)
+	a, err := scanListedApp(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, err
 	}
-	a.CustomerEmail = email
-	a.CustomerName = name
-	a.AssessmentID = parseNullUUID(assessment)
-	a.PreferredProductID = parseNullUUID(preferred)
-	a.AssignedAdvisorID = parseNullUUID(advisor)
 	return &a, nil
 }
 
-func (s *Service) UpdateStatus(ctx context.Context, actorID, appID uuid.UUID, status, nextAction string) (*Application, error) {
-	allowed := map[string]bool{
-		"NEW": true, "ASSESSMENT_COMPLETED": true, "DOCUMENTS_PENDING": true, "DOCUMENTS_UNDER_REVIEW": true,
-		"READY_FOR_SUBMISSION": true, "SUBMITTED_TO_LENDER": true, "LENDER_REVIEW": true,
-		"ADDITIONAL_INFORMATION_REQUIRED": true, "APPROVED": true, "REJECTED": true, "COMPLETED": true, "CANCELLED": true,
+func (s *Service) GetAdvisorCase(ctx context.Context, advisorID, appID uuid.UUID) (*Application, error) {
+	app, err := s.GetByID(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+	if app.AssignedAdvisorID == nil || *app.AssignedAdvisorID != advisorID {
+		return nil, ErrForbidden
+	}
+	return app, nil
+}
+
+func (s *Service) UpdateStatus(ctx context.Context, actorID, appID uuid.UUID, status, nextAction string, allowed map[string]bool) (*Application, error) {
+	if allowed == nil {
+		allowed = allCaseStatuses
 	}
 	if !allowed[status] {
 		return nil, ErrInvalid
@@ -444,19 +491,50 @@ func (s *Service) UpdateStatus(ctx context.Context, actorID, appID uuid.UUID, st
 	return s.GetByID(ctx, appID)
 }
 
-func (s *Service) Assign(ctx context.Context, actorID, appID, advisorID uuid.UUID) error {
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE mortgage_applications SET assigned_advisor_id=$2, updated_at=NOW() WHERE id=$1
-	`, appID, advisorID)
+func (s *Service) Assign(ctx context.Context, actorID, appID, advisorID uuid.UUID) (*Application, error) {
+	if _, err := s.GetByID(ctx, appID); err != nil {
+		return nil, err
+	}
+	var role, ustatus, email, name string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT u.role::text, u.status, u.email, COALESCE(p.full_name,'')
+		FROM users u
+		LEFT JOIN user_profiles p ON p.user_id = u.id
+		WHERE u.id=$1 AND u.deleted_at IS NULL
+	`, advisorID).Scan(&role, &ustatus, &email, &name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrInvalidAdvisor
+	}
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if role != "ADVISOR" || ustatus != "active" {
+		return nil, ErrInvalidAdvisor
+	}
+	label := name
+	if label == "" {
+		label = email
+	}
+	next := fmt.Sprintf("Assigned to %s.", label)
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE mortgage_applications SET assigned_advisor_id=$2, next_action_text=$3, updated_at=NOW() WHERE id=$1
+	`, appID, advisorID, next)
+	if err != nil {
+		return nil, err
 	}
 	_, _ = s.db.ExecContext(ctx, `UPDATE advisor_assignments SET active=FALSE WHERE application_id=$1 AND active=TRUE`, appID)
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO advisor_assignments (application_id, advisor_id, assigned_by, active)
 		VALUES ($1,$2,$3,TRUE)
 	`, appID, advisorID, actorID)
-	return err
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.db.ExecContext(ctx, `
+		INSERT INTO application_events (application_id, actor_id, event_type, payload)
+		VALUES ($1,$2,'assigned', jsonb_build_object('advisor_id', $3::text))
+	`, appID, actorID, advisorID)
+	return s.GetByID(ctx, appID)
 }
 
 func (s *Service) AddNote(ctx context.Context, authorID, appID uuid.UUID, body, visibility string) (*Note, error) {
@@ -549,6 +627,24 @@ func scanApp(row *sql.Row, email, name string) (*Application, error) {
 	a.PreferredProductID = parseNullUUID(preferred)
 	a.AssignedAdvisorID = parseNullUUID(advisor)
 	return &a, nil
+}
+
+func scanListedApp(row interface{ Scan(dest ...any) error }) (Application, error) {
+	var a Application
+	var assessment, preferred, advisor sql.NullString
+	var email, name, advName, advEmail string
+	err := row.Scan(&a.ID, &a.UserID, &assessment, &preferred, &a.Status, &advisor, &a.NextActionText, &a.CreatedAt, &a.UpdatedAt, &email, &name, &advName, &advEmail)
+	if err != nil {
+		return a, err
+	}
+	a.CustomerEmail = email
+	a.CustomerName = name
+	a.AssignedAdvisorName = advName
+	a.AssignedAdvisorEmail = advEmail
+	a.AssessmentID = parseNullUUID(assessment)
+	a.PreferredProductID = parseNullUUID(preferred)
+	a.AssignedAdvisorID = parseNullUUID(advisor)
+	return a, nil
 }
 
 func parseNullUUID(ns sql.NullString) *uuid.UUID {

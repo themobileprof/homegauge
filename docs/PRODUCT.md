@@ -37,7 +37,9 @@ Secondary CTA: **Compare Mortgage Options**
 
 ## Admin-configurable (CRUD)
 
-Lenders, mortgage products, eligibility rules, document requirements, readiness weights, salary-detection settings, disclaimers/legal copy, educational content, automation level, advisor assignment, verification status / last verified dates.
+Lenders, mortgage products, eligibility rules, document requirements, readiness weights, salary-detection settings, disclaimers/legal copy, educational content, automation level, verification status / last verified dates.
+
+**Case operations (admin sliver):** assign / reassign advisors, advisor and homebuyer reports, case status (including terminal outcomes), and top-level approvals (expand later). Advisors handle the rest of the file.
 
 ## Regulatory stance
 

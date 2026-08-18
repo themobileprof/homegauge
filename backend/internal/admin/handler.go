@@ -54,12 +54,19 @@ func (h *Handler) Overview(c *gin.Context) {
 		totalUsers += n
 	}
 
-	var products, lenders, openCases int
+	var products, lenders, openCases, unassigned, readyForApproval int
 	_ = h.db.QueryRowContext(c.Request.Context(), `SELECT COUNT(*) FROM mortgage_products WHERE deleted_at IS NULL AND status='active'`).Scan(&products)
 	_ = h.db.QueryRowContext(c.Request.Context(), `SELECT COUNT(*) FROM lenders WHERE deleted_at IS NULL AND status='active'`).Scan(&lenders)
 	_ = h.db.QueryRowContext(c.Request.Context(), `
 		SELECT COUNT(*) FROM mortgage_applications WHERE status NOT IN ('CANCELLED','COMPLETED','REJECTED')
 	`).Scan(&openCases)
+	_ = h.db.QueryRowContext(c.Request.Context(), `
+		SELECT COUNT(*) FROM mortgage_applications
+		WHERE assigned_advisor_id IS NULL AND status NOT IN ('CANCELLED','COMPLETED','REJECTED')
+	`).Scan(&unassigned)
+	_ = h.db.QueryRowContext(c.Request.Context(), `
+		SELECT COUNT(*) FROM mortgage_applications WHERE status = 'READY_FOR_SUBMISSION'
+	`).Scan(&readyForApproval)
 
 	routing := map[string]string{}
 	configured := []ai.ProviderName{}
@@ -73,7 +80,9 @@ func (h *Handler) Overview(c *gin.Context) {
 		"users_by_role":   counts,
 		"active_products": products,
 		"active_lenders":  lenders,
-		"open_cases":      openCases,
+		"open_cases":           openCases,
+		"unassigned_cases":     unassigned,
+		"ready_for_approval":   readyForApproval,
 		"ai": gin.H{
 			"configured": configured,
 			"routing":    routing,

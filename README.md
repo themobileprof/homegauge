@@ -24,9 +24,9 @@ Mortgage enablement platform — understand options in your market, check salary
 - Mortgage product browse/compare scoped by country
 - Salary-first eligibility assessment + readiness score
 - Personalized document checklist + private upload (signed download links)
-- Request advisor + advisor case queue (status, notes, AI suggestion approve/reject)
+- Request advisor; advisors work assigned files (notes, working status); admin assigns, reports, and records top-level status
 - Auth roles: CUSTOMER / ADVISOR / ADMIN / LENDER_USER
-- Role-specific workspaces: `/app` (homebuyer), `/advisor` (case queue), `/admin` (console), `/lender` (pipeline)
+- Role-specific workspaces: `/app` (homebuyer), `/advisor` (assigned cases), `/admin` (console + case ops), `/lender` (pipeline)
 
 ## Adding a country
 

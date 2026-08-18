@@ -126,8 +126,9 @@ func main() {
 	})
 	adminHandler := admin.NewHandler(sqlDB, aiClient)
 	adminHandler.Register(adminAPI)
+	appHandler.RegisterAdmin(adminAPI)
 
-	advisor := api.Group("/advisor", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdvisor, auth.RoleAdmin))
+	advisor := api.Group("/advisor", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdvisor))
 	advisor.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "scope": "advisor"})
 	})

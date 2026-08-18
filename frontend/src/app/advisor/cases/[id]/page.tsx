@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { ADVISOR_STATUSES, statusLabel } from "@/lib/cases";
 
 type CaseDetail = {
   case: {
@@ -18,18 +19,7 @@ type CaseDetail = {
   suggestions: { id: string; suggestion_type: string; payload: { message?: string }; status: string; confidence?: number }[];
 };
 
-const statuses = [
-  "DOCUMENTS_PENDING",
-  "DOCUMENTS_UNDER_REVIEW",
-  "READY_FOR_SUBMISSION",
-  "SUBMITTED_TO_LENDER",
-  "LENDER_REVIEW",
-  "ADDITIONAL_INFORMATION_REQUIRED",
-  "APPROVED",
-  "REJECTED",
-  "COMPLETED",
-  "CANCELLED",
-];
+const statuses = ADVISOR_STATUSES;
 
 export default function AdvisorCasePage() {
   const { id } = useParams<{ id: string }>();
@@ -90,16 +80,27 @@ export default function AdvisorCasePage() {
           </h1>
           <p className="text-sm text-muted">{data.case.customer_email}</p>
           <p className="mt-3 text-sm">{data.case.next_action_text}</p>
+          <p className="mt-2 text-xs text-muted">Working status only. Admin assigns the file and records approved, rejected, completed, or cancelled.</p>
 
+          {ADVISOR_STATUSES.includes(data.case.status as (typeof ADVISOR_STATUSES)[number]) ? (
           <form onSubmit={saveStatus} className="mt-8 flex flex-wrap items-end gap-3">
             <label className="text-sm">
               <span className="mb-1 block font-medium">Status</span>
               <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-[color:var(--line)] bg-white px-3 py-2">
-                {statuses.map((s) => <option key={s}>{s}</option>)}
+                {statuses.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabel(s)}
+                  </option>
+                ))}
               </select>
             </label>
             <button type="submit" className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-paper">Update</button>
           </form>
+          ) : (
+            <p className="mt-8 rounded-md bg-paper-2 px-4 py-3 text-sm">
+              Current status: <strong>{statusLabel(data.case.status)}</strong>. An admin manages this outcome.
+            </p>
+          )}
 
           <section className="mt-10">
             <h2 className="text-lg font-semibold">AI / concierge suggestions</h2>

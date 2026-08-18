@@ -10,6 +10,8 @@ type Overview = {
   active_products: number;
   active_lenders: number;
   open_cases: number;
+  unassigned_cases: number;
+  ready_for_approval: number;
 };
 
 export default function AdminHomePage() {
@@ -27,15 +29,32 @@ export default function AdminHomePage() {
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gold">Admin console</p>
       <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl font-semibold">Platform overview</h1>
       <p className="mt-3 max-w-2xl text-muted">
-        Operate markets, products, and staff from here. This is not the homebuyer journey and not the advisor case queue.
+        Operate markets, products, and staff from here. Advisors work the cases; this console only assigns, reports, and records top-level status.
       </p>
       {error && <p className="mt-6 text-sm text-[color:var(--danger)]">{error}</p>}
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="People on the platform" value={data?.users_total} href="/admin/users" />
         <Stat label="Active products" value={data?.active_products} href="/admin/products" />
-        <Stat label="Active lenders" value={data?.active_lenders} href="/admin/products" />
-        <Stat label="Open cases" value={data?.open_cases} href="/advisor" />
+        <Stat label="Unassigned cases" value={data?.unassigned_cases} href="/admin/cases" />
+        <Stat label="Open cases" value={data?.open_cases} href="/admin/cases" />
       </div>
+      <section className="mt-8 rounded-xl border border-[color:var(--line)] bg-white/80 p-6">
+        <h2 className="text-lg font-semibold">Case operations</h2>
+        <p className="mt-2 max-w-2xl text-sm text-muted">
+          Advisors handle the file. You assign work, set status, and take top-level decisions. More approval types will land here over time.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link href="/admin/cases" className="rounded-md bg-ink px-4 py-2.5 text-sm font-semibold text-paper">
+            Assign cases
+          </Link>
+          <Link href="/admin/reports" className="rounded-md border border-[color:var(--line)] px-4 py-2.5 text-sm font-semibold">
+            Advisor &amp; buyer reports
+          </Link>
+          <Link href="/admin/approvals" className="rounded-md border border-[color:var(--line)] px-4 py-2.5 text-sm font-semibold">
+            Approvals ({data?.ready_for_approval ?? 0})
+          </Link>
+        </div>
+      </section>
       <section className="mt-8 max-w-xl rounded-xl border border-[color:var(--line)] bg-white/80 p-6">
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-lg font-semibold">Users by role</h2>

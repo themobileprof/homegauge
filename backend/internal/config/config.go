@@ -51,7 +51,7 @@ func Load() (Config, error) {
 		RedisURL:             getenv("REDIS_URL", "redis://localhost:6379/0"),
 		SessionSecret:        getenv("SESSION_SECRET", "dev-only-change-me-homegauge-session"),
 		SessionTTL:           durationHours("SESSION_TTL_HOURS", 168),
-		CORSOrigins:          splitCSV(getenv("CORS_ORIGINS", "http://localhost:3000")),
+		CORSOrigins:          splitCSV(getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")),
 		SMTPFrom:             getenv("SMTP_FROM", "noreply@homegauge.local"),
 		MailerMode:           getenv("MAILER_MODE", "log"),
 		AnthropicAPIKey:      os.Getenv("ANTHROPIC_API_KEY"),
