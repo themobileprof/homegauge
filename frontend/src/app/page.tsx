@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 const steps = [
@@ -68,17 +69,27 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="relative animate-[fadeUp_0.9s_ease_both] overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[linear-gradient(160deg,#123526_0%,#1f6b45_48%,#0c1f17_100%)] p-6 text-paper shadow-[0_30px_80px_rgba(12,31,23,0.25)] md:p-8">
-            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(196,163,90,0.35),transparent_70%)]" />
-            <p className="text-sm uppercase tracking-[0.18em] text-gold">A new homeownership reality</p>
-            <p className="mt-4 font-[family-name:var(--font-display)] text-3xl font-semibold leading-tight">
-              For younger buyers and couples, mortgages are no longer optional — they are the practical path to owning a home.
-            </p>
-            <ul className="mt-8 space-y-4 text-sm leading-relaxed text-paper/90">
-              <li className="flex gap-3"><span className="text-gold">01</span> Home prices are rising faster than incomes in most markets.</li>
-              <li className="flex gap-3"><span className="text-gold">02</span> Mortgages let you spread cost over time instead of waiting years to save the full price.</li>
-              <li className="flex gap-3"><span className="text-gold">03</span> HomeGauge helps you understand options early, so you can plan with clarity and move with confidence.</li>
-            </ul>
+          <div className="relative min-h-[28rem] animate-[fadeUp_0.9s_ease_both] overflow-hidden rounded-2xl border border-[color:var(--line)] shadow-[0_30px_80px_rgba(12,31,23,0.25)] md:min-h-[36rem]">
+            <Image
+              src="/images/hero-couple.jpg"
+              alt="A young couple standing at the front of a house they hope to own"
+              fill
+              priority
+              className="object-cover object-[50%_20%]"
+              sizes="(min-width: 768px) 45vw, 100vw"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(12,31,23,0.05)_20%,rgba(12,31,23,0.88)_100%)]" />
+            <div className="absolute inset-0 z-10 flex flex-col justify-end p-6 text-paper md:p-8">
+              <p className="text-sm uppercase tracking-[0.18em] text-gold">A new homeownership reality</p>
+              <p className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold leading-tight">
+                For younger buyers and couples, mortgages are the practical path to homeownership.
+              </p>
+              <ul className="mt-6 space-y-3 text-sm leading-relaxed text-paper/90">
+                <li className="flex gap-3"><span className="text-gold">01</span> Home prices are rising faster than incomes in most markets.</li>
+                <li className="flex gap-3"><span className="text-gold">02</span> Mortgages let you spread cost over time instead of waiting years to save the full price.</li>
+                <li className="flex gap-3"><span className="text-gold">03</span> HomeGauge helps you understand options early, so you can plan with clarity and move with confidence.</li>
+              </ul>
+            </div>
           </div>
         </section>
 
@@ -101,16 +112,25 @@ export default function HomePage() {
         </section>
 
         <section className="mx-auto max-w-6xl px-5 py-20 md:px-8">
-          <div className="grid gap-10 md:grid-cols-[0.9fr_1.1fr] md:items-end">
+          <div className="grid gap-10 md:grid-cols-2 md:items-center">
+            <div className="relative min-h-[22rem] overflow-hidden rounded-2xl border border-[color:var(--line)] md:min-h-[28rem]">
+              <Image
+                src="/images/plan-kitchen.jpg"
+                alt="A young professional reviewing mortgage paperwork at a kitchen table"
+                fill
+                className="object-cover object-top"
+                sizes="(min-width: 768px) 50vw, 100vw"
+              />
+            </div>
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.16em] text-leaf">Why HomeGauge</p>
               <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold md:text-4xl">
                 Trust over theatre.
               </h2>
+              <p className="mt-4 text-muted leading-relaxed">
+                Mortgage terms move with policy and lender appetite in every market. We surface fees, equity needs, and verification dates — and we keep humans available when automation is not enough.
+              </p>
             </div>
-            <p className="text-muted leading-relaxed">
-              Mortgage terms move with policy and lender appetite in every market. We surface fees, equity needs, and verification dates — and we keep humans available when automation is not enough.
-            </p>
           </div>
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {[
@@ -126,11 +146,19 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="border-y border-[color:var(--line)] bg-[#0c1f17] text-paper">
-          <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-16 md:flex-row md:items-center md:justify-between md:px-8">
+        <section className="relative overflow-hidden border-y border-[color:var(--line)] text-paper">
+          <Image
+            src="/images/street-walk.jpg"
+            alt="A young couple walking a residential street, looking toward homes they might one day buy"
+            fill
+            className="object-cover"
+            sizes="100vw"
+          />
+          <div className="absolute inset-0 bg-[#0c1f17]/78" />
+          <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-6 px-5 py-20 md:flex-row md:items-center md:justify-between md:px-8">
             <div>
               <h2 className="font-[family-name:var(--font-display)] text-3xl font-semibold">Try the affordability calculator</h2>
-              <p className="mt-3 max-w-xl text-sm text-paper/75">
+              <p className="mt-3 max-w-xl text-sm text-paper/80">
                 Change price, deposit, rate, and tenor. See estimated monthly repayments in your market currency — clearly marked as estimates.
               </p>
             </div>

@@ -17,6 +17,8 @@ migrate -path migrations -database "$DATABASE_URL" up
 
 users, user_profiles, employment_profiles, financial_profiles, auth_tokens, lenders, mortgage_products, mortgage_rules, mortgage_product_documents, document_types, eligibility_assessments, eligibility_results, readiness_scores, salary_account_analyses, documents, document_reviews, mortgage_applications, application_events, advisor_assignments, advisor_notes, concierge_suggestions, notifications, content_items, legal_disclaimers, platform_settings, audit_logs, analytics_events
 
+`users.lender_id` links a `LENDER_USER` to a lender organisation. Lenders without a linked user are updated by advisors.
+
 ## Seed
 
 ```bash

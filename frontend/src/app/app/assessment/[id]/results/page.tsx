@@ -41,11 +41,15 @@ export default function ResultsPage() {
   const { id } = useParams<{ id: string }>();
   const [assessment, setAssessment] = useState<Assessment | null>(null);
   const [error, setError] = useState("");
+  const [chosen, setChosen] = useState("");
 
   useEffect(() => {
     api<{ assessment: Assessment }>(`/api/v1/assessments/${id}`)
       .then((d) => setAssessment(d.assessment))
       .catch((e) => setError(e.message));
+    api<{ application: { preferred_product_id?: string } }>("/api/v1/applications/me")
+      .then((d) => setChosen(d.application.preferred_product_id || ""))
+      .catch(() => undefined);
   }, [id]);
 
   return (
@@ -109,7 +113,24 @@ export default function ResultsPage() {
               {r.verification_status}
               {r.last_verified_at ? ` · last verified ${new Date(r.last_verified_at).toLocaleDateString("en-NG")}` : ""}
             </p>
-            <Link href={`/mortgages/${r.product_id}`} className="mt-3 inline-block text-sm font-semibold text-leaf">
+            {(r.outcome === "likely_eligible" || r.outcome === "potentially_eligible") && (
+              <button
+                type="button"
+                className="mt-3 text-sm font-semibold text-leaf"
+                onClick={() =>
+                  api("/api/v1/applications/me/product", {
+                    method: "PATCH",
+                    body: JSON.stringify({ product_id: r.product_id }),
+                  })
+                    .then(() => setError(""))
+                    .then(() => setChosen(r.product_id))
+                    .catch((e) => setError(e.message))
+                }
+              >
+                {chosen === r.product_id ? "Selected for your file ✓" : "Use this product on my file"}
+              </button>
+            )}
+            <Link href={`/mortgages/${r.product_id}`} className="mt-3 ml-4 inline-block text-sm font-semibold text-leaf">
               View product →
             </Link>
           </article>

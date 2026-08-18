@@ -24,7 +24,8 @@ Mortgage enablement platform — understand options in your market, check salary
 - Mortgage product browse/compare scoped by country
 - Salary-first eligibility assessment + readiness score
 - Personalized document checklist + private upload (signed download links)
-- Request advisor; advisors work assigned files (notes, working status); admin assigns, reports, and records top-level status
+- Request advisor; advisors work assigned files; admin assigns, reports, and records top-level status
+- Lender portal for onboarded `LENDER_USER` accounts; advisors record updates for lenders without an account
 - Auth roles: CUSTOMER / ADVISOR / ADMIN / LENDER_USER
 - Role-specific workspaces: `/app` (homebuyer), `/advisor` (assigned cases), `/admin` (console + case ops), `/lender` (pipeline)
 
@@ -76,7 +77,7 @@ Other targets: `make restart`, `make logs`, `make build`. Run `make` for the ful
 |-------|----------|------|----------|
 | admin@homegauge.local | ChangeMeAdmin1! | ADMIN | `/admin` |
 | advisor@homegauge.local | ChangeMeAdvisor1! | ADVISOR | `/advisor` |
-| lender@homegauge.local | ChangeMeLender1! | LENDER_USER | `/lender` |
+| lender@homegauge.local | ChangeMeLender1! | LENDER_USER | `/lender` (Stanbic IBTC) |
 | demo@homegauge.local | ChangeMeDemo1! | CUSTOMER | `/app` |
 
 ## Tests

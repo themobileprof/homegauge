@@ -37,15 +37,17 @@ type User struct {
 	ID              uuid.UUID  `json:"id"`
 	Email           string     `json:"email"`
 	Role            Role       `json:"role"`
+	LenderID        *uuid.UUID `json:"lender_id,omitempty"`
 	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
 	Status          string     `json:"status"`
 	CreatedAt       time.Time  `json:"created_at"`
 }
 
 type SessionUser struct {
-	ID    uuid.UUID `json:"id"`
-	Email string    `json:"email"`
-	Role  Role      `json:"role"`
+	ID       uuid.UUID  `json:"id"`
+	Email    string     `json:"email"`
+	Role     Role       `json:"role"`
+	LenderID *uuid.UUID `json:"lender_id,omitempty"`
 }
 
 type Service struct {
@@ -238,7 +240,7 @@ func (s *Service) LiveSessionUser(ctx context.Context, su SessionUser) (*Session
 	if u.Status != "active" {
 		return nil, ErrInvalidCredentials
 	}
-	return &SessionUser{ID: u.ID, Email: u.Email, Role: u.Role}, nil
+	return &SessionUser{ID: u.ID, Email: u.Email, Role: u.Role, LenderID: u.LenderID}, nil
 }
 
 func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
@@ -249,10 +251,11 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
 		verifiedAt sql.NullTime
 		createdAt  time.Time
 	)
+	var lenderID sql.NullString
 	err := s.db.QueryRowContext(ctx, `
-		SELECT email, role, status, email_verified_at, created_at
+		SELECT email, role, status, email_verified_at, created_at, lender_id::text
 		FROM users WHERE id = $1 AND deleted_at IS NULL
-	`, id).Scan(&email, &role, &status, &verifiedAt, &createdAt)
+	`, id).Scan(&email, &role, &status, &verifiedAt, &createdAt, &lenderID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}
@@ -260,6 +263,11 @@ func (s *Service) GetUser(ctx context.Context, id uuid.UUID) (*User, error) {
 		return nil, err
 	}
 	u := &User{ID: id, Email: email, Role: Role(role), Status: status, CreatedAt: createdAt}
+	if lenderID.Valid && lenderID.String != "" {
+		if lid, err := uuid.Parse(lenderID.String); err == nil {
+			u.LenderID = &lid
+		}
+	}
 	if verifiedAt.Valid {
 		t := verifiedAt.Time
 		u.EmailVerifiedAt = &t

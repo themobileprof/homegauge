@@ -25,7 +25,9 @@ export function naira(n: number | null | undefined) {
   }).format(n);
 }
 
-export const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+// Same-origin by default so the session cookie is first-party (required for advisor/admin auth).
+// Set NEXT_PUBLIC_API_URL only when the browser must call the API on another host.
+export const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${apiBase}${path}`, {

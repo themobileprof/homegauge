@@ -38,6 +38,7 @@ type ChecklistItem struct {
 	Status           string     `json:"status"`
 	DocumentID       *uuid.UUID `json:"document_id,omitempty"`
 	UploadedAt       *time.Time `json:"uploaded_at,omitempty"`
+	ReviewNotes      string     `json:"review_notes,omitempty"`
 }
 
 type Document struct {
@@ -164,6 +165,12 @@ func (s *Service) Checklist(ctx context.Context, userID uuid.UUID, productID *uu
 			item.Status = status
 			item.DocumentID = &docID
 			item.UploadedAt = &upAt
+			var notes string
+			_ = s.db.QueryRowContext(ctx, `
+				SELECT COALESCE(notes,'') FROM document_reviews
+				WHERE document_id=$1 ORDER BY created_at DESC LIMIT 1
+			`, docID).Scan(&notes)
+			item.ReviewNotes = notes
 		}
 		items = append(items, item)
 	}

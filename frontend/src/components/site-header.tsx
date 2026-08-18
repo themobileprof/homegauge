@@ -20,7 +20,7 @@ function itemsForRole(role?: Role | null): NavItem[] {
   }
   if (role === "ADVISOR") {
     return [
-      { href: "/advisor", label: "Your cases" },
+      { href: "/advisor", label: "Working files" },
       { href: "/mortgages", label: "Products" },
       { href: "/learn", label: "Guides" },
     ];

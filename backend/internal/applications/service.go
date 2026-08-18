@@ -25,8 +25,12 @@ type Application struct {
 	CustomerEmail      string     `json:"customer_email,omitempty"`
 	CustomerName       string     `json:"customer_name,omitempty"`
 	AssessmentID       *uuid.UUID `json:"assessment_id,omitempty"`
-	PreferredProductID *uuid.UUID `json:"preferred_product_id,omitempty"`
-	Status             string     `json:"status"`
+	PreferredProductID   *uuid.UUID `json:"preferred_product_id,omitempty"`
+	PreferredProductName string     `json:"preferred_product_name,omitempty"`
+	LenderID             *uuid.UUID `json:"lender_id,omitempty"`
+	LenderName           string     `json:"lender_name,omitempty"`
+	LenderHasAccount     bool       `json:"lender_has_account,omitempty"`
+	Status               string     `json:"status"`
 	AssignedAdvisorID    *uuid.UUID `json:"assigned_advisor_id,omitempty"`
 	AssignedAdvisorName  string     `json:"assigned_advisor_name,omitempty"`
 	AssignedAdvisorEmail string     `json:"assigned_advisor_email,omitempty"`
@@ -60,13 +64,19 @@ type Service struct {
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
 
 func (s *Service) GetMine(ctx context.Context, userID uuid.UUID) (*Application, error) {
-	row := s.db.QueryRowContext(ctx, `
-		SELECT id, user_id, assessment_id::text, preferred_product_id::text, status, assigned_advisor_id::text, next_action_text, created_at, updated_at
-		FROM mortgage_applications
+	var id uuid.UUID
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id FROM mortgage_applications
 		WHERE user_id=$1 AND status NOT IN ('CANCELLED')
 		ORDER BY created_at DESC LIMIT 1
-	`, userID)
-	return scanApp(row, "", "")
+	`, userID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.GetByID(ctx, id)
 }
 
 func (s *Service) RequestAdvisor(ctx context.Context, userID uuid.UUID) (*Application, error) {
@@ -362,6 +372,7 @@ type CaseQuery struct {
 	Status        string
 	Statuses      []string
 	IncludeClosed bool
+	LenderID      *uuid.UUID
 	Limit         int
 }
 
@@ -378,18 +389,31 @@ func (s *Service) ListCases(ctx context.Context, q CaseQuery) ([]Application, er
 		SELECT a.id, a.user_id, a.assessment_id::text, a.preferred_product_id::text, a.status,
 			a.assigned_advisor_id::text, a.next_action_text, a.created_at, a.updated_at,
 			u.email, COALESCE(p.full_name,''),
-			COALESCE(advp.full_name,''), COALESCE(advu.email,'')
+			COALESCE(advp.full_name,''), COALESCE(advu.email,''),
+			COALESCE(mp.name,''), COALESCE(ln.name,''), ln.id::text,
+			EXISTS(
+				SELECT 1 FROM users lu
+				WHERE lu.lender_id = ln.id AND lu.role = 'LENDER_USER'
+				  AND lu.status = 'active' AND lu.deleted_at IS NULL
+			)
 		FROM mortgage_applications a
 		JOIN users u ON u.id = a.user_id
 		LEFT JOIN user_profiles p ON p.user_id = a.user_id
 		LEFT JOIN users advu ON advu.id = a.assigned_advisor_id
 		LEFT JOIN user_profiles advp ON advp.user_id = a.assigned_advisor_id
+		LEFT JOIN mortgage_products mp ON mp.id = a.preferred_product_id AND mp.deleted_at IS NULL
+		LEFT JOIN lenders ln ON ln.id = mp.lender_id AND ln.deleted_at IS NULL
 		WHERE 1=1`
 	args := []any{}
 	n := 1
 	if q.AssignedTo != nil {
 		sqlStr += fmt.Sprintf(` AND a.assigned_advisor_id = $%d`, n)
 		args = append(args, *q.AssignedTo)
+		n++
+	}
+	if q.LenderID != nil {
+		sqlStr += fmt.Sprintf(` AND mp.lender_id = $%d`, n)
+		args = append(args, *q.LenderID)
 		n++
 	}
 	if q.Unassigned {
@@ -439,12 +463,20 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*Application, erro
 		SELECT a.id, a.user_id, a.assessment_id::text, a.preferred_product_id::text, a.status,
 			a.assigned_advisor_id::text, a.next_action_text, a.created_at, a.updated_at,
 			u.email, COALESCE(p.full_name,''),
-			COALESCE(advp.full_name,''), COALESCE(advu.email,'')
+			COALESCE(advp.full_name,''), COALESCE(advu.email,''),
+			COALESCE(mp.name,''), COALESCE(ln.name,''), ln.id::text,
+			EXISTS(
+				SELECT 1 FROM users lu
+				WHERE lu.lender_id = ln.id AND lu.role = 'LENDER_USER'
+				  AND lu.status = 'active' AND lu.deleted_at IS NULL
+			)
 		FROM mortgage_applications a
 		JOIN users u ON u.id = a.user_id
 		LEFT JOIN user_profiles p ON p.user_id = a.user_id
 		LEFT JOIN users advu ON advu.id = a.assigned_advisor_id
 		LEFT JOIN user_profiles advp ON advp.user_id = a.assigned_advisor_id
+		LEFT JOIN mortgage_products mp ON mp.id = a.preferred_product_id AND mp.deleted_at IS NULL
+		LEFT JOIN lenders ln ON ln.id = mp.lender_id AND ln.deleted_at IS NULL
 		WHERE a.id=$1
 	`, id)
 	a, err := scanListedApp(row)
@@ -466,6 +498,87 @@ func (s *Service) GetAdvisorCase(ctx context.Context, advisorID, appID uuid.UUID
 		return nil, ErrForbidden
 	}
 	return app, nil
+}
+
+func (s *Service) SetPreferredProduct(ctx context.Context, actorID, appID, productID uuid.UUID) (*Application, error) {
+	var name, status string
+	err := s.db.QueryRowContext(ctx, `
+		SELECT name, status FROM mortgage_products WHERE id=$1 AND deleted_at IS NULL
+	`, productID).Scan(&name, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if status != "active" {
+		return nil, ErrInvalid
+	}
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE mortgage_applications SET preferred_product_id=$2, updated_at=NOW() WHERE id=$1
+	`, appID, productID)
+	if err != nil {
+		return nil, err
+	}
+	_, _ = s.db.ExecContext(ctx, `
+		INSERT INTO application_events (application_id, actor_id, event_type, payload)
+		VALUES ($1,$2,'preferred_product_set', jsonb_build_object('product_id', $3::text, 'product_name', $4::text))
+	`, appID, actorID, productID, name)
+	return s.GetByID(ctx, appID)
+}
+
+func (s *Service) GetLenderCase(ctx context.Context, lenderID, appID uuid.UUID) (*Application, error) {
+	app, err := s.GetByID(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+	if app.LenderID == nil || *app.LenderID != lenderID {
+		return nil, ErrForbidden
+	}
+	if !lenderVisibleStatus(app.Status) {
+		return nil, ErrForbidden
+	}
+	return app, nil
+}
+
+func (s *Service) ListLenderCases(ctx context.Context, lenderID uuid.UUID) ([]Application, error) {
+	return s.ListCases(ctx, CaseQuery{
+		LenderID:      &lenderID,
+		Statuses:      []string{"SUBMITTED_TO_LENDER", "LENDER_REVIEW", "ADDITIONAL_INFORMATION_REQUIRED", "APPROVED", "REJECTED", "COMPLETED"},
+		IncludeClosed: true,
+		Limit:         100,
+	})
+}
+
+func lenderVisibleStatus(status string) bool {
+	switch status {
+	case "SUBMITTED_TO_LENDER", "LENDER_REVIEW", "ADDITIONAL_INFORMATION_REQUIRED", "APPROVED", "REJECTED", "COMPLETED":
+		return true
+	default:
+		return false
+	}
+}
+
+type LenderOrg struct {
+	ID          uuid.UUID `json:"id"`
+	CountryCode string    `json:"country_code"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+}
+
+func (s *Service) LenderOrg(ctx context.Context, lenderID uuid.UUID) (*LenderOrg, error) {
+	var o LenderOrg
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, country_code, name, description FROM lenders
+		WHERE id=$1 AND deleted_at IS NULL
+	`, lenderID).Scan(&o.ID, &o.CountryCode, &o.Name, &o.Description)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, actorID, appID uuid.UUID, status, nextAction string, allowed map[string]bool) (*Application, error) {
@@ -541,6 +654,11 @@ func (s *Service) AddNote(ctx context.Context, authorID, appID uuid.UUID, body, 
 	if visibility == "" {
 		visibility = "internal"
 	}
+	switch visibility {
+	case "internal", "customer", "lender":
+	default:
+		visibility = "internal"
+	}
 	var id uuid.UUID
 	var created time.Time
 	err := s.db.QueryRowContext(ctx, `
@@ -554,11 +672,28 @@ func (s *Service) AddNote(ctx context.Context, authorID, appID uuid.UUID, body, 
 }
 
 func (s *Service) ListNotes(ctx context.Context, appID uuid.UUID) ([]Note, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	return s.ListNotesVisible(ctx, appID, nil)
+}
+
+func (s *Service) ListNotesVisible(ctx context.Context, appID uuid.UUID, vis []string) ([]Note, error) {
+	q := `
 		SELECT n.id, n.author_id, u.email, n.body, n.visibility, n.created_at
 		FROM advisor_notes n JOIN users u ON u.id = n.author_id
-		WHERE n.application_id=$1 ORDER BY n.created_at DESC
-	`, appID)
+		WHERE n.application_id=$1`
+	args := []any{appID}
+	if len(vis) > 0 {
+		q += ` AND n.visibility IN (`
+		for i, v := range vis {
+			if i > 0 {
+				q += `,`
+			}
+			q += fmt.Sprintf(`$%d`, i+2)
+			args = append(args, v)
+		}
+		q += `)`
+	}
+	q += ` ORDER BY n.created_at DESC`
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -631,9 +766,12 @@ func scanApp(row *sql.Row, email, name string) (*Application, error) {
 
 func scanListedApp(row interface{ Scan(dest ...any) error }) (Application, error) {
 	var a Application
-	var assessment, preferred, advisor sql.NullString
-	var email, name, advName, advEmail string
-	err := row.Scan(&a.ID, &a.UserID, &assessment, &preferred, &a.Status, &advisor, &a.NextActionText, &a.CreatedAt, &a.UpdatedAt, &email, &name, &advName, &advEmail)
+	var assessment, preferred, advisor, lenderID sql.NullString
+	var email, name, advName, advEmail, productName, lenderName string
+	err := row.Scan(
+		&a.ID, &a.UserID, &assessment, &preferred, &a.Status, &advisor, &a.NextActionText, &a.CreatedAt, &a.UpdatedAt,
+		&email, &name, &advName, &advEmail, &productName, &lenderName, &lenderID, &a.LenderHasAccount,
+	)
 	if err != nil {
 		return a, err
 	}
@@ -641,9 +779,12 @@ func scanListedApp(row interface{ Scan(dest ...any) error }) (Application, error
 	a.CustomerName = name
 	a.AssignedAdvisorName = advName
 	a.AssignedAdvisorEmail = advEmail
+	a.PreferredProductName = productName
+	a.LenderName = lenderName
 	a.AssessmentID = parseNullUUID(assessment)
 	a.PreferredProductID = parseNullUUID(preferred)
 	a.AssignedAdvisorID = parseNullUUID(advisor)
+	a.LenderID = parseNullUUID(lenderID)
 	return a, nil
 }
 

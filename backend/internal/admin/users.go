@@ -17,12 +17,14 @@ import (
 )
 
 type adminUser struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	Status    string    `json:"status"`
-	FullName  string    `json:"full_name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         string    `json:"id"`
+	Email      string    `json:"email"`
+	Role       string    `json:"role"`
+	Status     string    `json:"status"`
+	FullName   string    `json:"full_name"`
+	LenderID   *string   `json:"lender_id,omitempty"`
+	LenderName string    `json:"lender_name,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type createUserInput struct {
@@ -30,6 +32,7 @@ type createUserInput struct {
 	Password string `json:"password" binding:"required,min=8"`
 	FullName string `json:"full_name" binding:"required,min=2"`
 	Role     string `json:"role" binding:"required"`
+	LenderID string `json:"lender_id"`
 }
 
 type updateUserInput struct {
@@ -37,13 +40,16 @@ type updateUserInput struct {
 	Role     *string `json:"role"`
 	Status   *string `json:"status"`
 	Password *string `json:"password"`
+	LenderID *string `json:"lender_id"`
 }
 
 func (h *Handler) ListUsers(c *gin.Context) {
 	rows, err := h.db.QueryContext(c.Request.Context(), `
-		SELECT u.id::text, u.email, u.role::text, u.status, COALESCE(p.full_name,''), u.created_at
+		SELECT u.id::text, u.email, u.role::text, u.status, COALESCE(p.full_name,''), u.created_at,
+			u.lender_id::text, COALESCE(l.name,'')
 		FROM users u
 		LEFT JOIN user_profiles p ON p.user_id = u.id
+		LEFT JOIN lenders l ON l.id = u.lender_id
 		WHERE u.deleted_at IS NULL
 		ORDER BY u.created_at DESC
 		LIMIT 200
@@ -56,9 +62,14 @@ func (h *Handler) ListUsers(c *gin.Context) {
 	out := []adminUser{}
 	for rows.Next() {
 		var it adminUser
-		if err := rows.Scan(&it.ID, &it.Email, &it.Role, &it.Status, &it.FullName, &it.CreatedAt); err != nil {
+		var lenderID sql.NullString
+		if err := rows.Scan(&it.ID, &it.Email, &it.Role, &it.Status, &it.FullName, &it.CreatedAt, &lenderID, &it.LenderName); err != nil {
 			httpx.Internal(c, "Could not load users.")
 			return
+		}
+		if lenderID.Valid && lenderID.String != "" {
+			s := lenderID.String
+			it.LenderID = &s
 		}
 		out = append(out, it)
 	}
@@ -80,6 +91,11 @@ func (h *Handler) CreateUser(c *gin.Context) {
 		httpx.BadRequest(c, "Role must be CUSTOMER, ADVISOR, ADMIN, or LENDER_USER.")
 		return
 	}
+	lenderID, err := h.resolveLenderID(c.Request.Context(), in.Role, in.LenderID, nil)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
 	fullName := strings.TrimSpace(in.FullName)
 	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	if err != nil {
@@ -96,10 +112,10 @@ func (h *Handler) CreateUser(c *gin.Context) {
 
 	var id string
 	err = tx.QueryRowContext(c.Request.Context(), `
-		INSERT INTO users (email, password_hash, role, status, email_verified_at)
-		VALUES ($1, $2, $3, 'active', NOW())
+		INSERT INTO users (email, password_hash, role, status, email_verified_at, lender_id)
+		VALUES ($1, $2, $3, 'active', NOW(), $4)
 		RETURNING id::text
-	`, email, string(hash), in.Role).Scan(&id)
+	`, email, string(hash), in.Role, lenderID).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "users_email_unique") || strings.Contains(err.Error(), "duplicate") {
 			httpx.Conflict(c, "An account with this email already exists.")
@@ -195,6 +211,16 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 		}
 	}
 
+	rawLender := ""
+	if in.LenderID != nil {
+		rawLender = *in.LenderID
+	}
+	lenderID, err := h.resolveLenderID(c.Request.Context(), nextRole, rawLender, existing.LenderID)
+	if err != nil {
+		httpx.BadRequest(c, err.Error())
+		return
+	}
+
 	if in.FullName != nil {
 		name := strings.TrimSpace(*in.FullName)
 		if len(name) < 2 {
@@ -211,8 +237,8 @@ func (h *Handler) UpdateUser(c *gin.Context) {
 	}
 
 	if _, err := h.db.ExecContext(c.Request.Context(), `
-		UPDATE users SET role=$2, status=$3, updated_at=NOW() WHERE id=$1::uuid AND deleted_at IS NULL
-	`, id, nextRole, nextStatus); err != nil {
+		UPDATE users SET role=$2, status=$3, lender_id=$4::uuid, updated_at=NOW() WHERE id=$1::uuid AND deleted_at IS NULL
+	`, id, nextRole, nextStatus, lenderID); err != nil {
 		httpx.Internal(c, "Could not update user.")
 		return
 	}
@@ -285,16 +311,49 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 
 func (h *Handler) getUser(ctx context.Context, id string) (*adminUser, error) {
 	var it adminUser
+	var lenderID sql.NullString
 	err := h.db.QueryRowContext(ctx, `
-		SELECT u.id::text, u.email, u.role::text, u.status, COALESCE(p.full_name,''), u.created_at
+		SELECT u.id::text, u.email, u.role::text, u.status, COALESCE(p.full_name,''), u.created_at,
+			u.lender_id::text, COALESCE(l.name,'')
 		FROM users u
 		LEFT JOIN user_profiles p ON p.user_id = u.id
+		LEFT JOIN lenders l ON l.id = u.lender_id
 		WHERE u.id=$1::uuid AND u.deleted_at IS NULL
-	`, id).Scan(&it.ID, &it.Email, &it.Role, &it.Status, &it.FullName, &it.CreatedAt)
+	`, id).Scan(&it.ID, &it.Email, &it.Role, &it.Status, &it.FullName, &it.CreatedAt, &lenderID, &it.LenderName)
 	if err != nil {
 		return nil, err
 	}
+	if lenderID.Valid && lenderID.String != "" {
+		s := lenderID.String
+		it.LenderID = &s
+	}
 	return &it, nil
+}
+
+func (h *Handler) resolveLenderID(ctx context.Context, role, raw string, existing *string) (*string, error) {
+	if role != "LENDER_USER" {
+		return nil, nil
+	}
+	id := strings.TrimSpace(raw)
+	if id == "" && existing != nil {
+		id = strings.TrimSpace(*existing)
+	}
+	if id == "" {
+		return nil, errors.New("Link a lender organisation for lender users.")
+	}
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, errors.New("Invalid lender.")
+	}
+	var n int
+	if err := h.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM lenders WHERE id=$1 AND deleted_at IS NULL`, uid).Scan(&n); err != nil {
+		return nil, errors.New("Could not check lender.")
+	}
+	if n == 0 {
+		return nil, errors.New("Unknown lender.")
+	}
+	s := uid.String()
+	return &s, nil
 }
 
 func (h *Handler) guardLastAdmin(ctx context.Context, targetID string) error {

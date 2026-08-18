@@ -10,8 +10,12 @@ type User = {
   role: Role;
   status: string;
   full_name: string;
+  lender_id?: string | null;
+  lender_name?: string;
   created_at: string;
 };
+
+type Lender = { id: string; name: string; country_code: string };
 
 const ROLES: Role[] = ["CUSTOMER", "ADVISOR", "ADMIN", "LENDER_USER"];
 
@@ -21,11 +25,13 @@ const emptyForm = {
   password: "",
   role: "CUSTOMER" as Role,
   status: "active",
+  lender_id: "",
 };
 
 export default function AdminUsersPage() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [lenders, setLenders] = useState<Lender[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -39,8 +45,12 @@ export default function AdminUsersPage() {
   const creating = editingId === "new";
 
   async function load() {
-    const d = await api<{ users: User[] }>("/api/v1/admin/users");
+    const [d, l] = await Promise.all([
+      api<{ users: User[] }>("/api/v1/admin/users"),
+      api<{ lenders: Lender[] }>("/api/v1/admin/lenders"),
+    ]);
     setUsers(d.users || []);
+    setLenders(l.lenders || []);
   }
 
   useEffect(() => {
@@ -74,6 +84,7 @@ export default function AdminUsersPage() {
       password: "",
       role: u.role,
       status: u.status || "active",
+      lender_id: u.lender_id || "",
     });
     setEditingId(u.id);
   }
@@ -97,6 +108,7 @@ export default function AdminUsersPage() {
             email: form.email.trim(),
             password: form.password,
             role: form.role,
+            lender_id: form.role === "LENDER_USER" ? form.lender_id : "",
           }),
         });
         setUsers((prev) => [d.user, ...prev.filter((u) => u.id !== d.user.id)]);
@@ -107,6 +119,7 @@ export default function AdminUsersPage() {
           full_name: form.full_name.trim(),
           role: form.role,
           status: form.status,
+          lender_id: form.role === "LENDER_USER" ? form.lender_id : "",
         };
         if (form.password.trim()) body.password = form.password;
         const d = await api<{ user: User }>(`/api/v1/admin/users/${editing.id}`, {
@@ -223,6 +236,27 @@ export default function AdminUsersPage() {
                 ))}
               </select>
             </label>
+            {form.role === "LENDER_USER" && (
+              <label className="block text-sm sm:col-span-2">
+                <span className="mb-1.5 block font-medium">Lender organisation</span>
+                <select
+                  required
+                  value={form.lender_id}
+                  onChange={(e) => setForm((f) => ({ ...f, lender_id: e.target.value }))}
+                  className="w-full rounded-md border border-[color:var(--line)] bg-white px-3 py-2.5 outline-none ring-leaf focus:ring-2"
+                >
+                  <option value="">Select lender</option>
+                  {lenders.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-muted">
+                  Lenders without an account are updated by advisors on the buyer file.
+                </span>
+              </label>
+            )}
             {!creating && (
               <label className="block text-sm">
                 <span className="mb-1.5 block font-medium">Status</span>
@@ -301,7 +335,10 @@ export default function AdminUsersPage() {
                   {u.id === me?.id && <span className="ml-2 text-xs font-semibold text-muted">you</span>}
                 </td>
                 <td className="px-4 py-3">{u.email}</td>
-                <td className="px-4 py-3 font-medium">{roleLabel(u.role)}</td>
+                <td className="px-4 py-3 font-medium">
+                  {roleLabel(u.role)}
+                  {u.role === "LENDER_USER" && u.lender_name ? <span className="block text-xs font-normal text-muted">{u.lender_name}</span> : null}
+                </td>
                 <td className="px-4 py-3">
                   <span className={u.status === "active" ? "text-leaf" : "text-muted"}>{u.status}</span>
                 </td>

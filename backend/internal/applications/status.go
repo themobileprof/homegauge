@@ -11,6 +11,13 @@ var advisorWorkingStatuses = map[string]bool{
 	"ADDITIONAL_INFORMATION_REQUIRED": true,
 }
 
+// Lender portal users may only move files already submitted to their organisation.
+var lenderWorkingStatuses = map[string]bool{
+	"SUBMITTED_TO_LENDER":             true,
+	"LENDER_REVIEW":                   true,
+	"ADDITIONAL_INFORMATION_REQUIRED": true,
+}
+
 var allCaseStatuses = map[string]bool{
 	"NEW":                             true,
 	"ASSESSMENT_COMPLETED":            true,
@@ -28,6 +35,10 @@ var allCaseStatuses = map[string]bool{
 
 func advisorMaySetStatus(status string) bool {
 	return advisorWorkingStatuses[status]
+}
+
+func lenderMaySetStatus(status string) bool {
+	return lenderWorkingStatuses[status]
 }
 
 func adminMaySetStatus(status string) bool {

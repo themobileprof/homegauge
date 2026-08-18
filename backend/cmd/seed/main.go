@@ -256,7 +256,11 @@ func seedLendersAndProducts(ctx context.Context, db *sql.DB) error {
 		{"title_docs", "Title documents", "property", true},
 	})
 
-	return nil
+	_, err := db.ExecContext(ctx, `
+		UPDATE users SET lender_id = $1::uuid, updated_at = NOW()
+		WHERE LOWER(email) = LOWER('lender@homegauge.local') AND deleted_at IS NULL
+	`, stanbicID)
+	return err
 }
 
 func upsertLender(ctx context.Context, db *sql.DB, id *string, country, name, desc, website, vstatus string, verifiedAt *time.Time) error {

@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-
-const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+import { apiBase } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();

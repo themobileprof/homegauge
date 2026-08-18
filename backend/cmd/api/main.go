@@ -82,7 +82,7 @@ func main() {
 	)
 	slog.Info("ai reserved for unstructured jobs", "routing", aiClient.JobRouting(), "configured", aiClient.ConfiguredProviders())
 	appSvc := applications.NewService(sqlDB)
-	appHandler := applications.NewHandler(appSvc)
+	appHandler := applications.NewHandler(appSvc, docSvc, eligSvc)
 
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -134,6 +134,13 @@ func main() {
 	})
 	appHandler.RegisterAdvisor(advisor)
 	docHandler.RegisterStaff(advisor)
+
+	lender := api.Group("/lender", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleLenderUser))
+	lender.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "scope": "lender"})
+	})
+	appHandler.RegisterLender(lender)
+	docHandler.RegisterStaff(lender)
 
 	slog.Info("homegauge api listening", "addr", cfg.APIAddr, "docs", docRoot)
 	if err := r.Run(cfg.APIAddr); err != nil {
