@@ -70,14 +70,14 @@ export default function HomePage() {
 
           <div className="relative animate-[fadeUp_0.9s_ease_both] overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[linear-gradient(160deg,#123526_0%,#1f6b45_48%,#0c1f17_100%)] p-6 text-paper shadow-[0_30px_80px_rgba(12,31,23,0.25)] md:p-8">
             <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(196,163,90,0.35),transparent_70%)]" />
-            <p className="text-sm uppercase tracking-[0.18em] text-gold">Salary-account review</p>
+            <p className="text-sm uppercase tracking-[0.18em] text-gold">A new homeownership reality</p>
             <p className="mt-4 font-[family-name:var(--font-display)] text-3xl font-semibold leading-tight">
-              Clear salary credits. One account. Honest next steps.
+              For younger buyers and couples, mortgages are no longer optional — they are the practical path to owning a home.
             </p>
             <ul className="mt-8 space-y-4 text-sm leading-relaxed text-paper/90">
-              <li className="flex gap-3"><span className="text-gold">01</span> We look for a repeating credit near payday.</li>
-              <li className="flex gap-3"><span className="text-gold">02</span> We match you to products in your selected country.</li>
-              <li className="flex gap-3"><span className="text-gold">03</span> An advisor can review anything that needs a human eye.</li>
+              <li className="flex gap-3"><span className="text-gold">01</span> Home prices are rising faster than incomes in most markets.</li>
+              <li className="flex gap-3"><span className="text-gold">02</span> Mortgages let you spread cost over time instead of waiting years to save the full price.</li>
+              <li className="flex gap-3"><span className="text-gold">03</span> HomeGauge helps you understand options early, so you can plan with clarity and move with confidence.</li>
             </ul>
           </div>
         </section>
