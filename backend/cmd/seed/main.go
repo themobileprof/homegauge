@@ -46,9 +46,9 @@ func seedDocumentTypes(ctx context.Context, db *sql.DB) error {
 	rows := [][3]string{
 		{"valid_id", "Valid government ID", "identity"},
 		{"passport_photo", "Passport photograph", "identity"},
-		{"payslips_3m", "3 months’ payslips", "income"},
+		{"payslips_3m", "3 months' payslips", "income"},
 		{"employment_letter", "Employment / introduction letter", "income"},
-		{"salary_statements_6m", "6 months’ salary account statements", "banking"},
+		{"salary_statements_6m", "6 months' salary account statements", "banking"},
 		{"nhf_evidence", "NHF contribution evidence", "income"},
 		{"offer_letter", "Property offer letter", "property"},
 		{"title_docs", "Registered title documents", "property"},
@@ -68,11 +68,11 @@ func seedDocumentTypes(ctx context.Context, db *sql.DB) error {
 
 func seedSettings(ctx context.Context, db *sql.DB) error {
 	settings := map[string]string{
-		"salary_variance_pct":      `15`,
-		"salary_payday_last_days":  `7`,
-		"default_iti_pct":          `35`,
-		"default_country_code":     `"NG"`,
-		"automation_level":         `"suggest_only"`,
+		"salary_variance_pct":     `15`,
+		"salary_payday_last_days": `7`,
+		"default_iti_pct":         `35`,
+		"default_country_code":    `"NG"`,
+		"automation_level":        `"suggest_only"`,
 		"readiness_weights": `{
 			"salary_pattern": 30,
 			"deposit_readiness": 20,
@@ -162,100 +162,182 @@ func seedLendersAndProducts(ctx context.Context, db *sql.DB) error {
 	now := time.Now()
 	const country = "NG"
 
-	var fmbnID, stanbicID, commercialID string
-	if err := upsertLender(ctx, db, &fmbnID, country, "Federal Mortgage Bank of Nigeria (FMBN) / NHF channel",
+	// ── Lenders ──────────────────────────────────────────────────────────────
+	var fmbnID, stanbicID, accessID, firstBankID, gtbID, zenithID, abbeyID string
+
+	if err := upsertLender(ctx, db, &fmbnID, country,
+		"Federal Mortgage Bank of Nigeria (FMBN) / NHF channel",
 		"Manages the National Housing Fund (NHF) social mortgage channel, typically accessed via Primary Mortgage Banks.",
 		"https://www.fmbn.gov.ng", "needs_verification", nil); err != nil {
 		return err
 	}
-	if err := upsertLender(ctx, db, &stanbicID, country, "Stanbic IBTC Bank",
-		"Commercial bank offering MREIF and other home loan variants. Terms below taken from lender-published MREIF FAQ.",
+	if err := upsertLender(ctx, db, &stanbicID, country,
+		"Stanbic IBTC Bank",
+		"Commercial bank offering MREIF and other home loan variants. Terms from lender-published MREIF FAQ (2024).",
 		"https://www.stanbicibtcbank.com", "verified", &now); err != nil {
 		return err
 	}
-	if err := upsertLender(ctx, db, &commercialID, country, "Commercial mortgage (market indicative)",
-		"Placeholder for typical commercial bank mortgages. Rates change with policy rates — mark verified only after confirming a specific bank offer.",
-		"", "needs_verification", nil); err != nil {
+	if err := upsertLender(ctx, db, &accessID, country,
+		"Access Bank",
+		"Offers residential mortgage loans and the EasyHome product range for salaried customers. Rates typically negotiated with the branch.",
+		"https://www.accessbankplc.com", "needs_verification", nil); err != nil {
+		return err
+	}
+	if err := upsertLender(ctx, db, &firstBankID, country,
+		"First Bank of Nigeria",
+		"Provides mortgage finance under the FirstHome and other housing-loan products for confirmed employees with salary domiciliation.",
+		"https://www.firstbanknigeria.com", "needs_verification", nil); err != nil {
+		return err
+	}
+	if err := upsertLender(ctx, db, &gtbID, country,
+		"Guaranty Trust Bank (GTBank)",
+		"Offers home loans for outright purchase and construction. Eligibility linked to salary-account domiciliation and employer confirmation letter.",
+		"https://www.gtbank.com", "needs_verification", nil); err != nil {
+		return err
+	}
+	if err := upsertLender(ctx, db, &zenithID, country,
+		"Zenith Bank",
+		"Provides residential mortgage finance for purchase and construction, targeted at salaried customers in the public and private sector.",
+		"https://www.zenithbank.com", "needs_verification", nil); err != nil {
+		return err
+	}
+	if err := upsertLender(ctx, db, &abbeyID, country,
+		"Abbey Mortgage Bank",
+		"Primary Mortgage Institution (PMI) licensed by the CBN. Offers NHF, FMBN, and retail mortgage products. One of the oldest dedicated mortgage banks in Nigeria.",
+		"https://www.abbeymortgagebank.com", "needs_verification", nil); err != nil {
 		return err
 	}
 
+	// ── Shared building blocks ────────────────────────────────────────────────
+	standardDocs := []docSeed{
+		{"valid_id", "Valid government-issued photo ID", "identity", true},
+		{"payslips_3m", "3 months' payslips", "income", true},
+		{"employment_letter", "Employment / confirmation letter", "income", true},
+		{"salary_statements_6m", "6 months' salary account statements", "banking", true},
+		{"offer_letter", "Property offer letter", "property", true},
+		{"title_docs", "Registered title documents", "property", true},
+	}
+	standardRules := []ruleSeed{
+		{"employment_type", "in", []string{"salaried", "civil_servant"}, "hard", "Automated review is for salaried workers with a clear salary credit."},
+		{"salary_months", "gte", 6, "hard", "We look for about 6 months of salary credits on one account."},
+		{"iti_pct", "lte", 35, "soft", "Keeping repayments at or below {value}% of income improves fit."},
+		{"age", "lte", 60, "hard", "You should typically complete repayment before age 60."},
+	}
+
+	// ── 1. NHF Mortgage Loan (FMBN) ──────────────────────────────────────────
 	var nhfProduct string
 	if err := upsertProduct(ctx, db, &nhfProduct, country, fmbnID, "NHF Mortgage Loan",
-		"Social mortgage for NHF contributors, usually via a Primary Mortgage Bank. Interest commonly cited at 6% p.a.; max loan up to 50m NGN; long tenor up to 30 years subject to age. Equity often 0–10% by loan band — confirm current FMBN circular.",
-		"nhf", 1_000_000, 50_000_000, 6.0, 6.0, 6.0, "fixed", 30, 10, 18, 60,
+		"Social mortgage for NHF contributors, via a Primary Mortgage Bank (PMB). Interest commonly cited at 6% p.a.; max loan up to ₦50m; tenor up to 30 years subject to age. Equity requirement varies by loan band — confirm the current FMBN circular with your PMB.",
+		"nhf", 1_000_000, 50_000_000, 6.0, 6.0, 6.0, "fixed", 30, 10, 18_000, 60,
 		"FMBN / PMB public materials", "https://www.fmbn.gov.ng", "needs_verification", nil); err != nil {
 		return err
 	}
-	_ = replaceRules(ctx, db, nhfProduct, []ruleSeed{
-		{"monthly_income", "gte", 300000, "hard", "This product usually needs enough income to keep repayments affordable (often around one-third of income)."},
-		{"age", "lte", 60, "hard", "You should typically complete repayment before age 60 / retirement."},
-		{"employment_type", "in", []string{"salaried", "civil_servant"}, "hard", "HomeGauge’s automated review currently supports salary-account workers."},
-		{"salary_months", "gte", 6, "hard", "We look for about 6 months of clear salary credits on one account."},
-		{"equity_pct", "gte", 10, "soft", "Many NHF loan bands ask for around {value}% equity (lower bands may ask less — confirm with the PMB)."},
-		{"nhf_contributor_months", "gte", 6, "hard", "NHF loans usually require at least 6 months of NHF contributions."},
-	})
-	_ = replaceDocs(ctx, db, nhfProduct, []docSeed{
-		{"valid_id", "Valid ID", "identity", true},
-		{"payslips_3m", "3 months’ payslips", "income", true},
-		{"employment_letter", "Employment letter", "income", true},
-		{"salary_statements_6m", "6 months’ salary account statements", "banking", true},
-		{"nhf_evidence", "NHF contribution evidence", "income", true},
-		{"offer_letter", "Property offer letter", "property", true},
-		{"title_docs", "Title documents", "property", true},
-	})
+	_ = replaceRules(ctx, db, nhfProduct, append([]ruleSeed{
+		{"monthly_income", "gte", 18000, "hard", "NHF scheme has a low income floor; primary eligibility is NHF contribution history."},
+		{"equity_pct", "gte", 10, "soft", "Many NHF loan bands ask for around {value}% equity (lower bands may ask less)."},
+		{"nhf_contributor_months", "gte", 6, "hard", "NHF loans require at least 6 months of NHF contributions."},
+	}, standardRules...))
+	_ = replaceDocs(ctx, db, nhfProduct, append(standardDocs, docSeed{"nhf_evidence", "NHF contribution evidence (EID card or FMBN statement)", "income", true}))
 
+	// ── 2. Stanbic IBTC — MREIF Home Loan ────────────────────────────────────
 	var mreif string
 	if err := upsertProduct(ctx, db, &mreif, country, stanbicID, "MREIF Home Loan",
-		"Ministry of Finance Incorporated Real Estate Investment Fund home loan via Stanbic IBTC. Lender FAQ: 9.75% p.a., 10% equity, 10m–100m NGN, up to 20 years, ITI 35%, salary domiciliation required for salaried applicants.",
-		"mreif", 10_000_000, 100_000_000, 9.75, 9.75, 9.75, "fixed", 20, 10, 500000, 60,
-		"Stanbic IBTC MREIF FAQ", "https://www.stanbicibtcbank.com/nigeriabank/personal/products-and-services/all-loans/MREIF-Frequently-Asked-Questions",
+		"Ministry of Finance Incorporated Real Estate Investment Fund home loan via Stanbic IBTC. Published terms: 9.75% p.a., 10% equity, ₦10m–₦100m, up to 20 years, ITI ≤35%, salary domiciliation required.",
+		"mreif", 10_000_000, 100_000_000, 9.75, 9.75, 9.75, "fixed", 20, 10, 500_000, 60,
+		"Stanbic IBTC MREIF FAQ",
+		"https://www.stanbicibtcbank.com/nigeriabank/personal/products-and-services/all-loans/MREIF-Frequently-Asked-Questions",
 		"verified", &now); err != nil {
 		return err
 	}
 	_ = replaceRules(ctx, db, mreif, []ruleSeed{
-		{"monthly_income", "gte", 500000, "hard", "Specialised/MREIF variants often cite a minimum net income around {value}."},
-		{"age", "lte", 60, "hard", "Applicants are typically 21–60 (or retirement) at loan maturity."},
+		{"monthly_income", "gte", 500000, "hard", "MREIF variants typically cite a minimum net income around {value}."},
+		{"age", "lte", 60, "hard", "Applicants are typically 21–60 at loan maturity."},
 		{"employment_type", "in", []string{"salaried"}, "hard", "Automated review is for salaried applicants with salary credits."},
 		{"years_employed", "gte", 0.5, "hard", "Usually at least 6 months with your current employer."},
-		{"salary_months", "gte", 6, "hard", "Provide 6 months’ bank statements showing salary."},
+		{"salary_months", "gte", 6, "hard", "Provide 6 months' bank statements showing salary."},
 		{"equity_pct", "gte", 10, "hard", "Minimum equity contribution is typically {value}%."},
 		{"loan_amount", "gte", 10000000, "hard", "Minimum loan amount is typically {value}."},
-		{"loan_amount", "lte", 100000000, "hard", "Maximum standard loan amount is typically {value}."},
-		{"iti_pct", "lte", 35, "hard", "Installment-to-income (ITI) should usually stay at or below {value}%."},
+		{"loan_amount", "lte", 100000000, "hard", "Maximum standard loan amount is {value}."},
+		{"iti_pct", "lte", 35, "hard", "ITI should stay at or below {value}%."},
 	})
-	_ = replaceDocs(ctx, db, mreif, []docSeed{
-		{"valid_id", "Valid photo ID", "identity", true},
-		{"payslips_3m", "3 months’ payslips", "income", true},
-		{"employment_letter", "Employer introduction letter", "income", true},
-		{"salary_statements_6m", "6 months’ statements with salary evidence", "banking", true},
-		{"offer_letter", "Offer letter from vendor", "property", true},
-		{"title_docs", "Registered title & survey", "property", true},
-	})
+	_ = replaceDocs(ctx, db, mreif, standardDocs)
 
-	var comm string
-	if err := upsertProduct(ctx, db, &comm, country, commercialID, "Commercial bank mortgage (indicative)",
-		"Typical commercial mortgages in a high-rate environment often price roughly from 20–26% p.a. (indicative 24%), with 20–30% equity and 10–20 year tenors. The actual rate is negotiated with the lender — this is not an offer.",
-		"commercial", 5_000_000, 150_000_000, 24.0, 20.0, 26.0, "negotiable", 15, 25, 750000, 55,
-		"Market indicative 2026", "", "needs_verification", nil); err != nil {
+	// ── 3. Access Bank — EasyHome Mortgage ───────────────────────────────────
+	var accessProduct string
+	if err := upsertProduct(ctx, db, &accessProduct, country, accessID, "Access Bank EasyHome Mortgage",
+		"Residential purchase or construction mortgage for salaried Access Bank customers. Rates are typically negotiated; indicative range 20–24% p.a. in the current environment. Salary domiciliation with Access Bank is usually required.",
+		"commercial", 5_000_000, 100_000_000, 22.0, 20.0, 24.0, "negotiable", 20, 20, 400_000, 60,
+		"Access Bank product page", "https://www.accessbankplc.com/personal/loans/mortgages",
+		"needs_verification", nil); err != nil {
 		return err
 	}
-	_ = replaceRules(ctx, db, comm, []ruleSeed{
-		{"monthly_income", "gte", 750000, "hard", "Commercial mortgages usually need strong verifiable salary income."},
-		{"employment_type", "in", []string{"salaried", "civil_servant"}, "hard", "Salary-account review only in this MVP."},
-		{"salary_months", "gte", 6, "hard", "6 months of salary credits required for automated review."},
-		{"equity_pct", "gte", 25, "hard", "Equity of about {value}% is common for commercial mortgages."},
-		{"iti_pct", "lte", 35, "soft", "Keeping repayments near or below {value}% of income improves fit."},
-		{"age", "lte", 55, "soft", "Many banks prefer repayment to finish by mid-50s / retirement."},
-	})
-	_ = replaceDocs(ctx, db, comm, []docSeed{
-		{"valid_id", "Valid ID", "identity", true},
-		{"payslips_3m", "3 months’ payslips", "income", true},
-		{"employment_letter", "Employment letter", "income", true},
-		{"salary_statements_6m", "6 months’ salary statements", "banking", true},
-		{"offer_letter", "Offer letter", "property", true},
-		{"title_docs", "Title documents", "property", true},
-	})
+	_ = replaceRules(ctx, db, accessProduct, append([]ruleSeed{
+		{"monthly_income", "gte", 400000, "hard", "Access Bank typically requires a minimum verifiable net income around {value}."},
+		{"equity_pct", "gte", 20, "hard", "Equity of about {value}% is typically required."},
+	}, standardRules...))
+	_ = replaceDocs(ctx, db, accessProduct, standardDocs)
 
+	// ── 4. First Bank — FirstHome Mortgage ───────────────────────────────────
+	var firstBankProduct string
+	if err := upsertProduct(ctx, db, &firstBankProduct, country, firstBankID, "First Bank FirstHome Loan",
+		"Residential mortgage for confirmed employees with salary domiciliation at First Bank. Rates are negotiable and vary with the CBN MPR; indicative range 21–25% p.a. Employer confirmation and 6 months' statements required.",
+		"commercial", 5_000_000, 150_000_000, 23.0, 21.0, 25.0, "negotiable", 20, 25, 500_000, 60,
+		"First Bank product page", "https://www.firstbanknigeria.com/personal/loans/mortgage",
+		"needs_verification", nil); err != nil {
+		return err
+	}
+	_ = replaceRules(ctx, db, firstBankProduct, append([]ruleSeed{
+		{"monthly_income", "gte", 500000, "hard", "First Bank mortgage products typically require a minimum net income of around {value}."},
+		{"equity_pct", "gte", 25, "hard", "Equity contribution of about {value}% is common."},
+	}, standardRules...))
+	_ = replaceDocs(ctx, db, firstBankProduct, standardDocs)
+
+	// ── 5. GTBank — Home Loan ─────────────────────────────────────────────────
+	var gtbProduct string
+	if err := upsertProduct(ctx, db, &gtbProduct, country, gtbID, "GTBank Home Loan",
+		"Purchase or construction mortgage for salaried GTBank customers. Eligibility tied to salary-account domiciliation and employer letter. Rates are negotiated; indicative range 22–26% p.a.",
+		"commercial", 5_000_000, 150_000_000, 24.0, 22.0, 26.0, "negotiable", 15, 25, 600_000, 60,
+		"GTBank product page", "https://www.gtbank.com/personal/loans/mortgage",
+		"needs_verification", nil); err != nil {
+		return err
+	}
+	_ = replaceRules(ctx, db, gtbProduct, append([]ruleSeed{
+		{"monthly_income", "gte", 600000, "hard", "GTBank mortgage products typically require a minimum net income of around {value}."},
+		{"equity_pct", "gte", 25, "hard", "Equity contribution of about {value}% is typical."},
+	}, standardRules...))
+	_ = replaceDocs(ctx, db, gtbProduct, standardDocs)
+
+	// ── 6. Zenith Bank — Residential Mortgage ────────────────────────────────
+	var zenithProduct string
+	if err := upsertProduct(ctx, db, &zenithProduct, country, zenithID, "Zenith Bank Residential Mortgage",
+		"Home-purchase and construction finance for confirmed salaried employees. Rates are negotiable; indicative 21–25% p.a. Salary domiciliation at Zenith Bank is typically required.",
+		"commercial", 5_000_000, 150_000_000, 23.0, 21.0, 25.0, "negotiable", 20, 25, 500_000, 60,
+		"Zenith Bank product page", "https://www.zenithbank.com/personal/mortgage",
+		"needs_verification", nil); err != nil {
+		return err
+	}
+	_ = replaceRules(ctx, db, zenithProduct, append([]ruleSeed{
+		{"monthly_income", "gte", 500000, "hard", "Zenith Bank mortgage products typically require a minimum net income around {value}."},
+		{"equity_pct", "gte", 25, "hard", "Equity contribution of about {value}% is commonly required."},
+	}, standardRules...))
+	_ = replaceDocs(ctx, db, zenithProduct, standardDocs)
+
+	// ── 7. Abbey Mortgage Bank — Retail Home Loan ────────────────────────────
+	var abbeyProduct string
+	if err := upsertProduct(ctx, db, &abbeyProduct, country, abbeyID, "Abbey Mortgage Bank Home Loan",
+		"Retail mortgage from one of Nigeria's leading Primary Mortgage Institutions. Offers NHF-route and non-NHF residential finance. Rates on commercial products are indicative 18–22% p.a.; NHF route follows FMBN circular.",
+		"commercial", 2_000_000, 50_000_000, 20.0, 18.0, 22.0, "negotiable", 20, 20, 300_000, 60,
+		"Abbey Mortgage Bank product page", "https://www.abbeymortgagebank.com",
+		"needs_verification", nil); err != nil {
+		return err
+	}
+	_ = replaceRules(ctx, db, abbeyProduct, append([]ruleSeed{
+		{"monthly_income", "gte", 300000, "hard", "Abbey Mortgage typically requires a minimum verifiable income of about {value}."},
+		{"equity_pct", "gte", 20, "hard", "Equity contribution of about {value}% is typical for retail products."},
+	}, standardRules...))
+	_ = replaceDocs(ctx, db, abbeyProduct, standardDocs)
+
+	// ── Link demo lender user to Stanbic IBTC ────────────────────────────────
 	_, err := db.ExecContext(ctx, `
 		UPDATE users SET lender_id = $1::uuid, updated_at = NOW()
 		WHERE LOWER(email) = LOWER('lender@homegauge.local') AND deleted_at IS NULL

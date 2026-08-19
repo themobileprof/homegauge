@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 
+const bp = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 const steps = [
   {
     title: "Share your salary picture",
@@ -71,17 +73,16 @@ export default function HomePage() {
 
           <div className="relative min-h-[28rem] animate-[fadeUp_0.9s_ease_both] overflow-hidden rounded-2xl border border-[color:var(--line)] shadow-[0_30px_80px_rgba(12,31,23,0.25)] md:min-h-[36rem]">
             <Image
-              src="/images/hero-couple.jpg"
+              src={`${bp}/images/hero-couple.jpg`}
               alt="A young couple standing at the front of a house they hope to own"
               fill
               priority
               className="object-cover object-[50%_20%]"
               sizes="(min-width: 768px) 45vw, 100vw"
             />
-            <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(12,31,23,0.05)_20%,rgba(12,31,23,0.88)_100%)]" />
-            <div className="absolute inset-0 z-10 flex flex-col justify-end p-6 text-paper md:p-8">
+            <div className="absolute inset-x-0 bottom-0 z-10 bg-ink p-6 text-paper md:p-8">
               <p className="text-sm uppercase tracking-[0.18em] text-gold">A new homeownership reality</p>
-              <p className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold leading-tight">
+              <p className="mt-3 font-[family-name:var(--font-display)] text-xl font-semibold leading-tight">
                 For younger buyers and couples, mortgages are the practical path to homeownership.
               </p>
               <ul className="mt-6 space-y-3 text-sm leading-relaxed text-paper/90">
@@ -115,7 +116,7 @@ export default function HomePage() {
           <div className="grid gap-10 md:grid-cols-2 md:items-center">
             <div className="relative min-h-[22rem] overflow-hidden rounded-2xl border border-[color:var(--line)] md:min-h-[28rem]">
               <Image
-                src="/images/plan-kitchen.jpg"
+                src={`${bp}/images/plan-kitchen.jpg`}
                 alt="A young professional reviewing mortgage paperwork at a kitchen table"
                 fill
                 className="object-cover object-top"
@@ -148,7 +149,7 @@ export default function HomePage() {
 
         <section className="relative overflow-hidden border-y border-[color:var(--line)] text-paper">
           <Image
-            src="/images/street-walk.jpg"
+            src={`${bp}/images/street-walk.jpg`}
             alt="A young couple walking a residential street, looking toward homes they might one day buy"
             fill
             className="object-cover"

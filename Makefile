@@ -12,7 +12,7 @@ WEB_PID  := $(RUN)/web.pid
 API_URL  := http://127.0.0.1:8080
 WEB_URL  := http://127.0.0.1:3000
 
-.PHONY: help start stop restart status seed build logs start-api start-web stop-api stop-web fix-swc
+.PHONY: help start stop restart status seed build logs start-api start-web stop-api stop-web fix-swc deploy
 
 help:
 	@echo "HomeGauge"
@@ -24,6 +24,7 @@ help:
 	@echo "  make seed      reset demo users/products"
 	@echo "  make build     compile API and seed binaries into .run/"
 	@echo "  make fix-swc   restore the vendored Next SWC binary if next dev bus-errors"
+	@echo "  make deploy    build + rsync + restart on themobileprof.com/mortgage"
 
 $(RUN):
 	mkdir -p $(RUN)
@@ -90,6 +91,9 @@ seed: build
 logs: | $(RUN)
 	@touch $(API_LOG) $(WEB_LOG)
 	tail -n 80 -F $(API_LOG) $(WEB_LOG)
+
+deploy:
+	@bash deploy/deploy.sh
 
 fix-swc:
 	tar -xzf $(ROOT)/frontend/.vendor/swc-linux-x64-gnu-15.5.23.tgz -C /tmp
