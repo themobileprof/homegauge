@@ -644,7 +644,9 @@ function Products({
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="font-semibold">{r.product_name}</p>
+                <Link href={`/mortgages/${r.product_id}`} className="font-semibold text-leaf hover:underline">
+                  {r.product_name}
+                </Link>
                 <p className="text-sm text-muted">{r.lender_name}</p>
               </div>
               <span className="text-xs font-semibold uppercase tracking-wide text-[#8a6d28]">{outcomeLabel(r.outcome)}</span>
@@ -655,6 +657,9 @@ function Products({
               {r.estimated_monthly_repayment != null ? ` · est. ${money(r.estimated_monthly_repayment)} / month` : ""}
               {r.min_equity_pct != null ? ` · min equity ${r.min_equity_pct}%` : ""}
             </p>
+            <Link href={`/mortgages/${r.product_id}`} className="mt-3 inline-block text-sm font-semibold text-leaf hover:underline">
+              View product details →
+            </Link>
           </li>
         ))}
       </ul>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
@@ -510,7 +511,9 @@ export default function AdminProductsPage() {
             {visible.map((p) => (
               <tr key={p.id} className="border-b border-[color:var(--line)] last:border-0">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{p.name}</div>
+                  <Link href={`/mortgages/${p.id}`} className="font-medium text-leaf hover:underline">
+                    {p.name}
+                  </Link>
                   <div className="text-xs text-muted">
                     {p.country_code} · {p.mortgage_type}
                   </div>
@@ -528,6 +531,9 @@ export default function AdminProductsPage() {
                 </td>
                 <td className="px-4 py-3 text-muted">{p.verification_status.replace(/_/g, " ")}</td>
                 <td className="px-4 py-3 text-right">
+                  <Link href={`/mortgages/${p.id}`} className="mr-4 font-semibold text-muted hover:text-leaf hover:underline">
+                    View
+                  </Link>
                   <button type="button" onClick={() => openEdit(p)} className="font-semibold text-leaf hover:underline">
                     Edit
                   </button>

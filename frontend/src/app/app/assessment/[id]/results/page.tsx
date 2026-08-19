@@ -99,7 +99,9 @@ export default function ResultsPage() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase text-leaf">{r.lender_name}</p>
-                <h3 className="text-lg font-semibold">{r.product_name}</h3>
+                <Link href={`/mortgages/${r.product_id}`} className="text-lg font-semibold text-leaf hover:underline">
+                  {r.product_name}
+                </Link>
               </div>
               <span className="rounded-md bg-paper-2 px-3 py-1 text-xs font-semibold">{outcomeLabel(r.outcome)}</span>
             </div>

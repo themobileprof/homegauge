@@ -85,34 +85,36 @@ export default function MortgagesPage() {
           {products.map((p) => {
             const on = selected.includes(p.id);
             return (
-              <article key={p.id} className={`rounded-xl border p-5 ${on ? "border-leaf bg-white" : "border-[color:var(--line)] bg-white/70"}`}>
+              <article key={p.id} className={`rounded-xl border p-5 transition hover:shadow-sm ${on ? "border-leaf bg-white" : "border-[color:var(--line)] bg-white/70 hover:border-leaf/40"}`}>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <Link href={`/mortgages/${p.id}`} className="min-w-0 flex-1 group">
                     <p className="text-xs font-semibold uppercase tracking-wide text-leaf">{p.lender_name}</p>
-                    <h2 className="mt-1 text-lg font-semibold">{p.name}</h2>
-                  </div>
+                    <h2 className="mt-1 text-lg font-semibold group-hover:text-leaf">{p.name}</h2>
+                  </Link>
                   <button
                     type="button"
                     onClick={() => toggle(p.id)}
-                    className={`rounded-md px-3 py-1.5 text-xs font-semibold ${on ? "bg-leaf text-white" : "bg-paper-2 text-ink"}`}
+                    className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold ${on ? "bg-leaf text-white" : "bg-paper-2 text-ink"}`}
                   >
                     {on ? "Selected" : "Select"}
                   </button>
                 </div>
-                <p className="mt-3 line-clamp-3 text-sm text-muted">{p.description}</p>
-                <dl className="mt-4 space-y-2 text-sm">
-                  <Row label="Interest rate" value={formatRate(p)} />
-                  <Row label="Max years to repay" value={p.max_tenor_years ? `${p.max_tenor_years} years` : "—"} />
-                  <Row label="Typical deposit (equity)" value={p.min_equity_pct != null ? `${p.min_equity_pct}%` : "—"} />
-                  <Row label="Min income" value={money(p.min_income)} />
-                  <Row label="Loan range" value={`${money(p.min_loan_amount)} – ${money(p.max_loan_amount)}`} />
-                </dl>
-                <p className="mt-4 text-xs text-muted">
-                  {p.verification_status === "verified" ? "Verified" : "Needs verification"}
-                  {p.last_verified_at ? ` · ${new Date(p.last_verified_at).toLocaleDateString(country?.locale || "en")}` : ""}
-                </p>
-                <Link href={`/mortgages/${p.id}`} className="mt-3 inline-block text-sm font-semibold text-leaf">
-                  View details →
+                <Link href={`/mortgages/${p.id}`} className="mt-3 block group">
+                  <p className="line-clamp-3 text-sm text-muted group-hover:text-ink">{p.description}</p>
+                  <dl className="mt-4 space-y-2 text-sm">
+                    <Row label="Interest rate" value={formatRate(p)} />
+                    <Row label="Max years to repay" value={p.max_tenor_years ? `${p.max_tenor_years} years` : "—"} />
+                    <Row label="Typical deposit (equity)" value={p.min_equity_pct != null ? `${p.min_equity_pct}%` : "—"} />
+                    <Row label="Min income" value={money(p.min_income)} />
+                    <Row label="Loan range" value={`${money(p.min_loan_amount)} – ${money(p.max_loan_amount)}`} />
+                  </dl>
+                  <p className="mt-4 text-xs text-muted">
+                    {p.verification_status === "verified" ? "Verified" : "Needs verification"}
+                    {p.last_verified_at ? ` · ${new Date(p.last_verified_at).toLocaleDateString(country?.locale || "en")}` : ""}
+                  </p>
+                  <span className="mt-3 inline-block text-sm font-semibold text-leaf group-hover:underline">
+                    View details →
+                  </span>
                 </Link>
               </article>
             );

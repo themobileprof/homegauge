@@ -59,7 +59,12 @@ function CompareInner() {
               <tr className="border-b border-[color:var(--line)] text-left">
                 <th className="py-3 pr-4 font-medium text-muted">Detail</th>
                 {products.map((p) => (
-                  <th key={p.id} className="px-3 py-3 font-semibold">{p.name}<div className="text-xs font-normal text-muted">{p.lender_name}</div></th>
+                  <th key={p.id} className="px-3 py-3 font-semibold">
+                    <Link href={`/mortgages/${p.id}`} className="hover:text-leaf hover:underline">
+                      {p.name}
+                    </Link>
+                    <div className="text-xs font-normal text-muted">{p.lender_name}</div>
+                  </th>
                 ))}
               </tr>
             </thead>

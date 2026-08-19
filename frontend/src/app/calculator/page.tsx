@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
@@ -149,7 +150,11 @@ export default function CalculatorPage() {
               )}
               {selected && (
                 <p className="mt-1 text-xs text-muted">
-                  Using {selected.name}. {formatRate(selected)}.
+                  Using{" "}
+                  <Link href={`/mortgages/${selected.id}`} className="font-semibold text-leaf hover:underline">
+                    {selected.name}
+                  </Link>
+                  . {formatRate(selected)}.
                   {selected.verification_status === "verified" ? " Marked verified." : " Still needs verification."}
                   {isNegotiableRate(selected)
                     ? " The lender sets the actual rate — this estimate is not an offer."

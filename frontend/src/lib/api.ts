@@ -25,9 +25,21 @@ export function naira(n: number | null | undefined) {
   }).format(n);
 }
 
-// Same-origin by default so the session cookie is first-party (required for advisor/admin auth).
-// Set NEXT_PUBLIC_API_URL only when the browser must call the API on another host.
-export const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+// Same-origin by default so the session cookie is first-party.
+// Set NEXT_PUBLIC_API_URL only when the API lives on a different host.
+function resolveApiBasePath(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+
+  // Keep product boundaries: only prefix when this app runs under /mortgage.
+  if (typeof window !== "undefined") {
+    const p = window.location.pathname;
+    if (p === "/mortgage" || p.startsWith("/mortgage/")) return "/mortgage";
+  }
+
+  return "";
+}
+
+export const apiBase = resolveApiBasePath();
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${apiBase}${path}`, {

@@ -10,7 +10,7 @@ import type { DocItem, Note } from "@/lib/advisor-file";
 type Assessment = {
   id: string;
   status: string;
-  results?: { outcome: string; product_name: string; lender_name: string; estimated_monthly_repayment: number | null }[];
+  results?: { product_id: string; outcome: string; product_name: string; lender_name: string; estimated_monthly_repayment: number | null }[];
   readiness?: { total: number; narrative: string };
   best_fit_why?: string;
 };
@@ -161,8 +161,10 @@ export default function AppHome() {
             <p className="mt-2 text-sm text-muted">{likely} product(s) look like a possible fit based on stated criteria.</p>
             <ul className="mt-4 space-y-2 text-sm">
               {(assessment.results || []).slice(0, 3).map((r) => (
-                <li key={r.product_name} className="flex justify-between gap-3 border-b border-[color:var(--line)] pb-2">
-                  <span>{r.product_name}</span>
+                <li key={r.product_id} className="flex justify-between gap-3 border-b border-[color:var(--line)] pb-2">
+                  <Link href={`/mortgages/${r.product_id}`} className="font-medium text-leaf hover:underline">
+                    {r.product_name}
+                  </Link>
                   <span className="text-muted">{outcomeLabel(r.outcome)}</span>
                 </li>
               ))}
