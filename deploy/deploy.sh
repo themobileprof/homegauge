@@ -118,6 +118,7 @@ echo "    binaries → .build/"
 echo "==> Building Next.js frontend (standalone, basePath=/mortgage)"
 cd "$ROOT/frontend"
 [[ -d node_modules ]] || npm ci
+# Pass both public and server-side env vars at build time so they are baked in.
 NEXT_PUBLIC_BASE_PATH=/mortgage npm run build
 cd "$ROOT"
 

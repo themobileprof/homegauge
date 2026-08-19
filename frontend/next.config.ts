@@ -1,6 +1,5 @@
 import type { NextConfig } from "next";
 
-const apiProxy = process.env.API_PROXY_TARGET || "http://127.0.0.1:8080";
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 const nextConfig: NextConfig = {
@@ -14,9 +13,14 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: !!basePath,
   },
-  async rewrites() {
-    return [{ source: "/api/:path*", destination: `${apiProxy}/api/:path*` }];
-  },
+  // In dev, proxy /api/* to the local Go API.
+  // In production, nginx routes /mortgage/api/* directly to the Go API — no baking needed.
+  ...(!basePath && {
+    async rewrites() {
+      const apiProxy = process.env.API_PROXY_TARGET || "http://127.0.0.1:8080";
+      return [{ source: "/api/:path*", destination: `${apiProxy}/api/:path*` }];
+    },
+  }),
 };
 
 export default nextConfig;
