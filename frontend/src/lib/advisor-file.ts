@@ -115,10 +115,11 @@ export const STAGES = [
   { id: "situation", n: "01", title: "Situation" },
   { id: "documents", n: "02", title: "Documents" },
   { id: "products", n: "03", title: "Product fit" },
-  { id: "lender", n: "04", title: "Lender" },
-  { id: "work", n: "05", title: "Work list" },
-  { id: "notes", n: "06", title: "Notes" },
-  { id: "advance", n: "07", title: "Advance the file" },
+  { id: "readiness", n: "04", title: "Get ready costs" },
+  { id: "lender", n: "05", title: "Lender" },
+  { id: "work", n: "06", title: "Work list" },
+  { id: "notes", n: "07", title: "Notes" },
+  { id: "advance", n: "08", title: "Advance the file" },
 ] as const;
 
 const ACTION_LABELS: Record<string, string> = {
@@ -215,6 +216,7 @@ export function deriveFile(data: CaseFile) {
       situation: Boolean(assessment && in_?.monthly_net_income),
       documents: allRequiredAccepted,
       products: likely.length > 0,
+      readiness: Boolean(data.case.preferred_product_id),
       lender: Boolean(data.case.preferred_product_id),
       work: pendingWork.length === 0,
       notes: (data.notes || []).length > 0,

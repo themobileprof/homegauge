@@ -445,6 +445,12 @@ func seedLendersAndProducts(ctx context.Context, db *sql.DB) error {
 		{"direct_debit_mandate", "Executed direct debit mandate and undated cheques", "banking", true},
 		{"gsi_form", "Executed Global Standing Instruction (GSI) form", "banking", true},
 	})
+	// Indicative pre-approval fees from Infinity Trust staff checklist (valuation to be advised).
+	_, _ = db.ExecContext(ctx, `
+		UPDATE mortgage_products
+		SET processing_fee = 20000, legal_fee = 60000, valuation_fee = NULL, updated_at = NOW()
+		WHERE id = $1::uuid
+	`, infinityProduct)
 
 	// ── Link demo lender user to Stanbic IBTC ────────────────────────────────
 	_, err := db.ExecContext(ctx, `

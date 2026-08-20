@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { JourneyStrip } from "@/components/journey-strip";
 import { api, outcomeLabel } from "@/lib/api";
 import {
   STAGES,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/advisor-file";
 import { ADVISOR_STATUSES, documentStatusLabel, fileRef, statusLabel } from "@/lib/cases";
 import { useCountry } from "@/lib/country";
+import { deriveJourney, readinessCostsFromProduct } from "@/lib/journey";
 import { formatRate } from "@/lib/rates";
 
 export default function AdvisorCasePage() {
@@ -31,6 +33,12 @@ export default function AdvisorCasePage() {
   const [noteVis, setNoteVis] = useState<"internal" | "customer">("internal");
   const [extraAsk, setExtraAsk] = useState("");
   const [stage, setStage] = useState<(typeof STAGES)[number]["id"]>("situation");
+  const [productFees, setProductFees] = useState<{
+    processing_fee?: number | null;
+    valuation_fee?: number | null;
+    legal_fee?: number | null;
+    min_equity_pct?: number | null;
+  } | null>(null);
 
   async function load() {
     const d = await api<CaseFile>(`/api/v1/advisor/cases/${id}`);
@@ -50,6 +58,30 @@ export default function AdvisorCasePage() {
   const file = useMemo(() => (data ? deriveFile(data) : null), [data]);
   const working = data ? isWorkingStatus(data.case.status) : false;
   const buyer = data?.case.customer_name || data?.case.customer_email || "Buyer";
+
+  const journey = useMemo(() => {
+    if (!file || !data) return null;
+    return deriveJourney({
+      assessmentCompleted: Boolean(file.assessment && file.assessment.status === "completed"),
+      hasLikelyProduct: file.likely.length > 0,
+      preferredProductId: data.case.preferred_product_id,
+      requiredDocs: file.required.length,
+      acceptedRequiredDocs: file.acceptedRequired.length,
+      sentBackDocs: file.sentBack.length,
+      caseStatus: data.case.status,
+    });
+  }, [data, file]);
+
+  useEffect(() => {
+    const pid = data?.case.preferred_product_id;
+    if (!pid) {
+      setProductFees(null);
+      return;
+    }
+    api<{ product: NonNullable<typeof productFees> }>(`/api/v1/mortgage-products/${pid}`)
+      .then((d) => setProductFees(d.product))
+      .catch(() => setProductFees(null));
+  }, [data?.case.preferred_product_id]);
 
   function flash(ok: string) {
     setMessage(ok);
@@ -279,6 +311,13 @@ export default function AdvisorCasePage() {
           </div>
         </header>
 
+        {journey && (
+          <div className="mt-5 rounded-sm border border-[#c4a35a]/25 bg-white/50 px-4 py-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[#8a6d28]">Buyer journey</p>
+            <JourneyStrip phases={journey.phases} nextHint={journey.nextHint} />
+          </div>
+        )}
+
         {(error || message) && (
           <p className={`mt-4 text-sm ${error ? "text-[color:var(--danger)]" : "text-leaf"}`}>{error || message}</p>
         )}
@@ -338,6 +377,15 @@ export default function AdvisorCasePage() {
             )}
 
             {stage === "products" && <Products money={money} file={file} />}
+
+            {stage === "readiness" && (
+              <ReadinessCosts
+                money={money}
+                hasProduct={Boolean(data.case.preferred_product_id)}
+                productName={data.case.preferred_product_name}
+                fees={productFees}
+              />
+            )}
 
             {stage === "lender" && (
               <LenderDesk
@@ -664,6 +712,63 @@ function Products({
         ))}
       </ul>
       {ranked.length === 0 && <p className="mt-4 text-sm text-muted">No product outcomes on this assessment.</p>}
+    </div>
+  );
+}
+
+function ReadinessCosts({
+  money,
+  hasProduct,
+  productName,
+  fees,
+}: {
+  money: (n: number | null | undefined) => string;
+  hasProduct: boolean;
+  productName?: string;
+  fees: {
+    processing_fee?: number | null;
+    valuation_fee?: number | null;
+    legal_fee?: number | null;
+    min_equity_pct?: number | null;
+  } | null;
+}) {
+  if (!hasProduct) {
+    return (
+      <p className="mt-6 text-sm text-muted">
+        Choose a product first. Then this stage lists equity and processing costs the salaried buyer should budget before disbursement — tracked manually for now (no payments through HomeGauge yet).
+      </p>
+    );
+  }
+  const costs = readinessCostsFromProduct(fees || {});
+  return (
+    <div className="mt-6">
+      <p className="text-sm leading-relaxed text-muted">
+        Pre-disbursement obligations for <strong>{productName}</strong>. Coach the buyer on cash needed before the loan is released.
+        Confirm domicile vs GSI with the lender as a condition precedent — HomeGauge does not service monthly repayments.
+      </p>
+      <ul className="mt-5 space-y-3">
+        {costs.map((c) => (
+          <li key={c.key} className="rounded-sm border border-[color:var(--line)] bg-white/70 px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="font-semibold">{c.label}</p>
+              <p className="text-sm font-medium">{c.amount != null ? money(c.amount) : "Confirm with lender"}</p>
+            </div>
+            <p className="mt-1 text-sm text-muted">{c.note}</p>
+            <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[#8a6d28]">
+              {c.when === "before_approval"
+                ? "Pre-approval"
+                : c.when === "at_offer"
+                  ? "At offer (still pre-disbursement)"
+                  : "Before disbursement"}
+            </p>
+          </li>
+        ))}
+      </ul>
+      <ul className="mt-6 space-y-2 text-sm text-muted">
+        <li>• Confirm employer NHF remittance status when the product is NHF.</li>
+        <li>• Confirm whether lender wants full salary domicile or repayment mandate only (condition precedent).</li>
+        <li>• Pre-disbursement payments through HomeGauge (Fund &amp; settle) are not live yet — record offline payments in Notes.</li>
+      </ul>
     </div>
   );
 }

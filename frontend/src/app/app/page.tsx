@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { JourneyStrip } from "@/components/journey-strip";
 import { api, outcomeLabel } from "@/lib/api";
+import type { DocItem, Note } from "@/lib/advisor-file";
 import { buyerStatusLabel, documentStatusLabel } from "@/lib/cases";
 import { useCountry } from "@/lib/country";
-import type { DocItem, Note } from "@/lib/advisor-file";
+import { deriveJourney, readinessCostsFromProduct } from "@/lib/journey";
 
 type Assessment = {
   id: string;
@@ -19,11 +21,19 @@ type Application = {
   id: string;
   status: string;
   next_action_text: string;
+  preferred_product_id?: string;
   preferred_product_name?: string;
   lender_name?: string;
   lender_has_account?: boolean;
   assigned_advisor_name?: string;
   assigned_advisor_email?: string;
+};
+
+type ProductFees = {
+  processing_fee?: number | null;
+  valuation_fee?: number | null;
+  legal_fee?: number | null;
+  min_equity_pct?: number | null;
 };
 
 export default function AppHome() {
@@ -32,6 +42,7 @@ export default function AppHome() {
   const [app, setApp] = useState<Application | null>(null);
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [fees, setFees] = useState<ProductFees | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -48,6 +59,13 @@ export default function AppHome() {
         setApp(file?.application || null);
         setDocs(file?.documents || []);
         setNotes(file?.notes || []);
+        const pid = file?.application?.preferred_product_id;
+        if (pid) {
+          return api<{ product: ProductFees }>(`/api/v1/mortgage-products/${pid}`)
+            .then((d) => setFees(d.product))
+            .catch(() => setFees(null));
+        }
+        setFees(null);
       })
       .finally(() => setLoaded(true));
   }, []);
@@ -58,34 +76,34 @@ export default function AppHome() {
   const accepted = required.filter((d) => d.status === "accepted").length;
   const sentBack = docs.filter((d) => d.status === "requires_replacement" || d.status === "rejected");
   const withLender = ["SUBMITTED_TO_LENDER", "LENDER_REVIEW"].includes(app?.status || "");
-  const outcome = ["APPROVED", "REJECTED", "COMPLETED"].includes(app?.status || "");
 
-  const steps = useMemo(
-    () => [
-      { done: completed, label: "Eligibility assessment" },
-      { done: likely > 0, label: "Mortgage options identified" },
-      { done: accepted > 0 && sentBack.length === 0 && required.length > 0 && accepted === required.length, label: "Documents" },
-      { done: Boolean(app?.assigned_advisor_name || app?.assigned_advisor_email), label: "Advisor on your file" },
-      { done: withLender || outcome, label: "With a lender" },
-    ],
-    [accepted, app, completed, likely, outcome, required.length, sentBack.length, withLender],
+  const journey = useMemo(
+    () =>
+      deriveJourney({
+        assessmentCompleted: completed,
+        hasLikelyProduct: likely > 0,
+        preferredProductId: app?.preferred_product_id,
+        requiredDocs: required.length,
+        acceptedRequiredDocs: accepted,
+        sentBackDocs: sentBack.length,
+        caseStatus: app?.status,
+      }),
+    [accepted, app?.preferred_product_id, app?.status, completed, likely, required.length, sentBack.length],
   );
+
+  const costs = useMemo(() => (fees ? readinessCostsFromProduct(fees) : []), [fees]);
 
   return (
     <div className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-leaf">Homebuyer workspace</p>
       <h1 className="mt-2 font-[family-name:var(--font-display)] text-4xl font-semibold">Your mortgage journey</h1>
       <p className="mt-3 text-muted">
-        Know where you stand, prepare documents, and follow what your advisor and lender need next. HomeGauge is not a bank — only a lender can approve a mortgage.
+        Built for salaried first-time buyers — entirely pre-disbursement: qualify, get ready, then submit to a lender. HomeGauge is not a bank and does not service the loan after disbursement.
       </p>
 
-      <ol className="mt-10 space-y-3 text-sm">
-        {steps.map((s) => (
-          <li key={s.label} className={s.done ? "text-leaf" : "text-muted"}>
-            {s.done ? "✓" : "○"} {s.label}
-          </li>
-        ))}
-      </ol>
+      <div className="mt-8">
+        <JourneyStrip phases={journey.phases} nextHint={journey.nextHint} />
+      </div>
 
       {!loaded && <p className="mt-8 text-muted">Loading…</p>}
 
@@ -103,6 +121,26 @@ export default function AppHome() {
           {(app.assigned_advisor_name || app.assigned_advisor_email) && (
             <p className="mt-2 text-sm text-muted">Advisor: {app.assigned_advisor_name || app.assigned_advisor_email}</p>
           )}
+        </div>
+      )}
+
+      {loaded && costs.length > 0 && (
+        <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-white/80 p-5">
+          <h2 className="font-semibold">Get ready — known costs</h2>
+          <p className="mt-1 text-sm text-muted">
+            Estimates for your selected product. You track and pay these with the lender/vendors for now — HomeGauge does not collect them yet.
+          </p>
+          <ul className="mt-4 space-y-3 text-sm">
+            {costs.map((c) => (
+              <li key={c.key} className="border-b border-[color:var(--line)] pb-3 last:border-0 last:pb-0">
+                <div className="flex justify-between gap-3">
+                  <span className="font-medium">{c.label}</span>
+                  <span className="text-muted">{c.amount != null ? money(c.amount) : "Confirm"}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted">{c.note}</p>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

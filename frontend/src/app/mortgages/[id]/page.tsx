@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useCountry } from "@/lib/country";
+import { readinessCostsFromProduct } from "@/lib/journey";
 import { formatRate, isNegotiableRate } from "@/lib/rates";
 
 type Product = {
@@ -21,6 +22,9 @@ type Product = {
   min_income: number | null;
   min_loan_amount: number | null;
   max_loan_amount: number | null;
+  processing_fee: number | null;
+  valuation_fee: number | null;
+  legal_fee: number | null;
   source: string | null;
   source_url: string | null;
   verification_status: string;
@@ -68,6 +72,21 @@ export default function ProductDetailPage() {
               Source: <a className="underline" href={product.source_url} target="_blank" rel="noreferrer">{product.source || product.source_url}</a>
             </p>
           )}
+          <h2 className="mt-10 text-xl font-semibold">Get ready — known costs</h2>
+          <p className="mt-2 text-sm text-muted">
+            What salaried buyers typically need to budget before disbursement. HomeGauge does not collect these yet — confirm with the lender.
+          </p>
+          <ul className="mt-4 space-y-3 text-sm">
+            {readinessCostsFromProduct(product).map((c) => (
+              <li key={c.key} className="rounded-md bg-paper-2/80 px-3 py-3">
+                <div className="flex justify-between gap-3">
+                  <span className="font-medium">{c.label}</span>
+                  <span>{c.amount != null ? money(c.amount) : "Confirm"}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted">{c.note}</p>
+              </li>
+            ))}
+          </ul>
           <h2 className="mt-10 text-xl font-semibold">Documents usually required</h2>
           <ul className="mt-4 space-y-2 text-sm">
             {(product.documents || []).map((d) => (
