@@ -28,7 +28,7 @@ function itemsForRole(role?: Role | null): NavItem[] {
   if (role === "LENDER_USER") {
     return [
       { href: "/lender", label: "Pipeline" },
-      { href: "/mortgages", label: "Your products" },
+      { href: "/lender/products", label: "Your products" },
       { href: "/learn", label: "Guides" },
     ];
   }

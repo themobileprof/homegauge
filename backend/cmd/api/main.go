@@ -150,6 +150,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"ok": true, "scope": "lender"})
 	})
 	appHandler.RegisterLender(lender)
+	adminHandler.RegisterLender(lender)
 	docHandler.RegisterStaff(lender)
 
 	slog.Info("homegauge api listening", "addr", cfg.APIAddr, "docs", docRoot)

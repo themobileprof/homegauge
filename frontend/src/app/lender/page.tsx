@@ -64,6 +64,11 @@ export default function LenderHomePage() {
           HomeGauge-prepared files submitted to your products. Record that you are reviewing, or ask for more information.
           A recorded outcome here is still not a bank approval on HomeGauge — admin records the top-level case status.
         </p>
+        <p className="mt-4">
+          <Link href="/lender/products" className="text-sm font-semibold text-[#1f4d6b] hover:underline">
+            Manage your products →
+          </Link>
+        </p>
         {error && <p className="mt-6 text-sm text-[color:var(--danger)]">{error}</p>}
         {loading && <p className="mt-8 text-sm text-muted">Opening pipeline…</p>}
 
