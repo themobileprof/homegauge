@@ -16,8 +16,10 @@ import (
 	"github.com/homegauge/homegauge/backend/internal/countries"
 	"github.com/homegauge/homegauge/backend/internal/documents"
 	"github.com/homegauge/homegauge/backend/internal/eligibility"
+	"github.com/homegauge/homegauge/backend/internal/funding"
 	"github.com/homegauge/homegauge/backend/internal/middleware"
 	"github.com/homegauge/homegauge/backend/internal/mortgages"
+	"github.com/homegauge/homegauge/backend/internal/paystack"
 	"github.com/homegauge/homegauge/backend/internal/platform/db"
 	"github.com/homegauge/homegauge/backend/internal/platform/mailer"
 	"github.com/homegauge/homegauge/backend/internal/platform/migrate"
@@ -83,6 +85,11 @@ func main() {
 	slog.Info("ai reserved for unstructured jobs", "routing", aiClient.JobRouting(), "configured", aiClient.ConfiguredProviders())
 	appSvc := applications.NewService(sqlDB)
 	appHandler := applications.NewHandler(appSvc, docSvc, eligSvc)
+	psClient := paystack.NewClient(cfg.PaystackSecretKey, cfg.PaystackPublicKey, cfg.PaystackDVABank)
+	fundingSvc := funding.NewService(sqlDB, psClient, cfg.PaystackSecretKey)
+	fundingHandler := funding.NewHandler(fundingSvc)
+	appSvc.SetFundingSync(fundingSvc)
+	slog.Info("paystack funding", "enabled", fundingSvc.Enabled(), "dva_bank", cfg.PaystackDVABank)
 
 	if cfg.AppEnv == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -107,11 +114,13 @@ func main() {
 	countryHandler.RegisterRoutes(api)
 	mortgageHandler.RegisterRoutes(api)
 	docHandler.RegisterPublicSigned(api)
+	fundingHandler.RegisterPublic(api)
 
 	authed := api.Group("", middleware.Authenticate(authSvc))
 	eligHandler.RegisterRoutes(authed)
 	docHandler.RegisterCustomer(authed)
 	appHandler.RegisterCustomer(authed)
+	fundingHandler.RegisterCustomer(authed)
 
 	adminAPI := api.Group("/admin", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleAdmin))
 	adminAPI.GET("/ping", func(c *gin.Context) {
@@ -134,6 +143,7 @@ func main() {
 	})
 	appHandler.RegisterAdvisor(advisor)
 	docHandler.RegisterStaff(advisor)
+	fundingHandler.RegisterAdvisor(advisor)
 
 	lender := api.Group("/lender", middleware.Authenticate(authSvc), middleware.RequireRoles(auth.RoleLenderUser))
 	lender.GET("/ping", func(c *gin.Context) {

@@ -7,7 +7,7 @@ import { api, outcomeLabel } from "@/lib/api";
 import type { DocItem, Note } from "@/lib/advisor-file";
 import { buyerStatusLabel, documentStatusLabel } from "@/lib/cases";
 import { useCountry } from "@/lib/country";
-import { deriveJourney, readinessCostsFromProduct } from "@/lib/journey";
+import { deriveJourney, readinessCostsFromProduct, type FundingSnapshot } from "@/lib/journey";
 
 type Assessment = {
   id: string;
@@ -43,6 +43,7 @@ export default function AppHome() {
   const [docs, setDocs] = useState<DocItem[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [fees, setFees] = useState<ProductFees | null>(null);
+  const [funding, setFunding] = useState<FundingSnapshot | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -53,12 +54,16 @@ export default function AppHome() {
       api<{ application: Application; documents: DocItem[]; notes: Note[] }>("/api/v1/applications/me")
         .then((d) => d)
         .catch(() => null),
+      api<FundingSnapshot>("/api/v1/applications/me/funding")
+        .then((d) => d)
+        .catch(() => null),
     ])
-      .then(([a, file]) => {
+      .then(([a, file, fund]) => {
         setAssessment(a);
         setApp(file?.application || null);
         setDocs(file?.documents || []);
         setNotes(file?.notes || []);
+        setFunding(fund);
         const pid = file?.application?.preferred_product_id;
         if (pid) {
           return api<{ product: ProductFees }>(`/api/v1/mortgage-products/${pid}`)
@@ -87,8 +92,10 @@ export default function AppHome() {
         acceptedRequiredDocs: accepted,
         sentBackDocs: sentBack.length,
         caseStatus: app?.status,
+        fundingSettled: Boolean(funding?.all_settled),
+        fundingEnabled: Boolean(funding?.enabled),
       }),
-    [accepted, app?.preferred_product_id, app?.status, completed, likely, required.length, sentBack.length],
+    [accepted, app?.preferred_product_id, app?.status, completed, funding?.all_settled, funding?.enabled, likely, required.length, sentBack.length],
   );
 
   const costs = useMemo(() => (fees ? readinessCostsFromProduct(fees) : []), [fees]);
@@ -128,7 +135,7 @@ export default function AppHome() {
         <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-white/80 p-5">
           <h2 className="font-semibold">Get ready — known costs</h2>
           <p className="mt-1 text-sm text-muted">
-            Estimates for your selected product. You track and pay these with the lender/vendors for now — HomeGauge does not collect them yet.
+            Estimates for your selected product. Open Fund &amp; settle to collect fees into your case account before disbursement.
           </p>
           <ul className="mt-4 space-y-3 text-sm">
             {costs.map((c) => (
@@ -141,6 +148,11 @@ export default function AppHome() {
               </li>
             ))}
           </ul>
+          {app?.preferred_product_id && (
+            <Link href="/app/funding" className="mt-4 inline-block text-sm font-semibold text-leaf">
+              Open Fund &amp; settle →
+            </Link>
+          )}
         </div>
       )}
 

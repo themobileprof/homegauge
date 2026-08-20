@@ -15,7 +15,7 @@ import {
 } from "@/lib/advisor-file";
 import { ADVISOR_STATUSES, documentStatusLabel, fileRef, statusLabel } from "@/lib/cases";
 import { useCountry } from "@/lib/country";
-import { deriveJourney, readinessCostsFromProduct } from "@/lib/journey";
+import { deriveJourney, readinessCostsFromProduct, type FundingSnapshot } from "@/lib/journey";
 import { formatRate } from "@/lib/rates";
 
 export default function AdvisorCasePage() {
@@ -39,6 +39,7 @@ export default function AdvisorCasePage() {
     legal_fee?: number | null;
     min_equity_pct?: number | null;
   } | null>(null);
+  const [funding, setFunding] = useState<FundingSnapshot | null>(null);
 
   async function load() {
     const d = await api<CaseFile>(`/api/v1/advisor/cases/${id}`);
@@ -69,19 +70,26 @@ export default function AdvisorCasePage() {
       acceptedRequiredDocs: file.acceptedRequired.length,
       sentBackDocs: file.sentBack.length,
       caseStatus: data.case.status,
+      fundingSettled: Boolean(funding?.all_settled),
+      fundingEnabled: Boolean(funding?.enabled),
     });
-  }, [data, file]);
+  }, [data, file, funding?.all_settled, funding?.enabled]);
 
   useEffect(() => {
     const pid = data?.case.preferred_product_id;
-    if (!pid) {
+    const caseId = data?.case.id;
+    if (!pid || !caseId) {
       setProductFees(null);
+      setFunding(null);
       return;
     }
     api<{ product: NonNullable<typeof productFees> }>(`/api/v1/mortgage-products/${pid}`)
       .then((d) => setProductFees(d.product))
       .catch(() => setProductFees(null));
-  }, [data?.case.preferred_product_id]);
+    api<FundingSnapshot>(`/api/v1/advisor/cases/${caseId}/funding`)
+      .then((d) => setFunding(d))
+      .catch(() => setFunding(null));
+  }, [data?.case.preferred_product_id, data?.case.id]);
 
   function flash(ok: string) {
     setMessage(ok);
@@ -384,6 +392,13 @@ export default function AdvisorCasePage() {
                 hasProduct={Boolean(data.case.preferred_product_id)}
                 productName={data.case.preferred_product_name}
                 fees={productFees}
+                funding={funding}
+                caseId={data.case.id}
+                onRefreshFunding={() =>
+                  api<FundingSnapshot>(`/api/v1/advisor/cases/${data.case.id}/funding`)
+                    .then(setFunding)
+                    .catch(() => undefined)
+                }
               />
             )}
 
@@ -721,6 +736,9 @@ function ReadinessCosts({
   hasProduct,
   productName,
   fees,
+  funding,
+  caseId,
+  onRefreshFunding,
 }: {
   money: (n: number | null | undefined) => string;
   hasProduct: boolean;
@@ -731,20 +749,87 @@ function ReadinessCosts({
     legal_fee?: number | null;
     min_equity_pct?: number | null;
   } | null;
+  funding: FundingSnapshot | null;
+  caseId: string;
+  onRefreshFunding: () => void;
 }) {
+  const [busy, setBusy] = useState("");
   if (!hasProduct) {
     return (
       <p className="mt-6 text-sm text-muted">
-        Choose a product first. Then this stage lists equity and processing costs the salaried buyer should budget before disbursement — tracked manually for now (no payments through HomeGauge yet).
+        Choose a product first. Then this stage lists equity and processing costs the salaried buyer should budget before disbursement.
       </p>
     );
   }
+
+  async function mark(oid: string, status: "waived" | "paid_offline" | "pending") {
+    setBusy(oid + status);
+    try {
+      await api(`/api/v1/advisor/cases/${caseId}/funding/obligations/${oid}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      onRefreshFunding();
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (funding) {
+    return (
+      <div className="mt-6">
+        <p className="text-sm leading-relaxed text-muted">
+          Pre-disbursement Fund &amp; settle for <strong>{productName}</strong>. Buyer pays collectable fees into a Paystack dedicated virtual account; you can waive or mark offline payments.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3 text-sm">
+          <p>Due: <strong>{money(funding.total_due)}</strong></p>
+          <p>Received: <strong>{money(funding.total_received)}</strong></p>
+          <p>Outstanding: <strong>{money(funding.total_outstanding)}</strong></p>
+        </div>
+        {funding.account?.account_number && (
+          <p className="mt-3 text-sm">
+            Collection account: <strong>{funding.account.bank_name}</strong> · {funding.account.account_number}
+          </p>
+        )}
+        {!funding.enabled && (
+          <p className="mt-3 text-sm text-muted">Paystack keys are not configured — obligations still track manually.</p>
+        )}
+        <ul className="mt-5 space-y-3">
+          {funding.obligations.map((o) => (
+            <li key={o.id} className="rounded-sm border border-[color:var(--line)] bg-white/70 px-4 py-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{o.label}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted">{o.status.replaceAll("_", " ")}</p>
+                </div>
+                <p className="text-sm font-medium">{o.amount != null ? money(o.amount) : "Confirm"}</p>
+              </div>
+              {o.note && <p className="mt-1 text-sm text-muted">{o.note}</p>}
+              {o.collectable && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" disabled={!!busy} onClick={() => mark(o.id, "paid_offline")} className="text-xs font-semibold text-[#8a6d28]">
+                    Mark paid offline
+                  </button>
+                  <button type="button" disabled={!!busy} onClick={() => mark(o.id, "waived")} className="text-xs font-semibold text-muted">
+                    Waive
+                  </button>
+                  <button type="button" disabled={!!busy} onClick={() => mark(o.id, "pending")} className="text-xs font-semibold text-muted">
+                    Reset pending
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   const costs = readinessCostsFromProduct(fees || {});
   return (
     <div className="mt-6">
       <p className="text-sm leading-relaxed text-muted">
-        Pre-disbursement obligations for <strong>{productName}</strong>. Coach the buyer on cash needed before the loan is released.
-        Confirm domicile vs GSI with the lender as a condition precedent — HomeGauge does not service monthly repayments.
+        Pre-disbursement obligations for <strong>{productName}</strong>. Funding snapshot is loading or unavailable — showing product fee estimates.
       </p>
       <ul className="mt-5 space-y-3">
         {costs.map((c) => (
@@ -754,20 +839,8 @@ function ReadinessCosts({
               <p className="text-sm font-medium">{c.amount != null ? money(c.amount) : "Confirm with lender"}</p>
             </div>
             <p className="mt-1 text-sm text-muted">{c.note}</p>
-            <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-[#8a6d28]">
-              {c.when === "before_approval"
-                ? "Pre-approval"
-                : c.when === "at_offer"
-                  ? "At offer (still pre-disbursement)"
-                  : "Before disbursement"}
-            </p>
           </li>
         ))}
-      </ul>
-      <ul className="mt-6 space-y-2 text-sm text-muted">
-        <li>• Confirm employer NHF remittance status when the product is NHF.</li>
-        <li>• Confirm whether lender wants full salary domicile or repayment mandate only (condition precedent).</li>
-        <li>• Pre-disbursement payments through HomeGauge (Fund &amp; settle) are not live yet — record offline payments in Notes.</li>
       </ul>
     </div>
   );

@@ -58,10 +58,18 @@ type Suggestion struct {
 }
 
 type Service struct {
-	db *sql.DB
+	db      *sql.DB
+	funding FundingSyncer
+}
+
+// FundingSyncer creates/updates pre-disbursement obligations when a product is chosen.
+type FundingSyncer interface {
+	SyncObligations(ctx context.Context, appID, productID uuid.UUID) error
 }
 
 func NewService(db *sql.DB) *Service { return &Service{db: db} }
+
+func (s *Service) SetFundingSync(f FundingSyncer) { s.funding = f }
 
 func (s *Service) GetMine(ctx context.Context, userID uuid.UUID) (*Application, error) {
 	var id uuid.UUID
@@ -524,6 +532,9 @@ func (s *Service) SetPreferredProduct(ctx context.Context, actorID, appID, produ
 		INSERT INTO application_events (application_id, actor_id, event_type, payload)
 		VALUES ($1,$2,'preferred_product_set', jsonb_build_object('product_id', $3::text, 'product_name', $4::text))
 	`, appID, actorID, productID, name)
+	if s.funding != nil {
+		_ = s.funding.SyncObligations(ctx, appID, productID)
+	}
 	return s.GetByID(ctx, appID)
 }
 

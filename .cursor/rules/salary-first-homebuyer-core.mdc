@@ -27,6 +27,7 @@ Treat this as the default constraint for product, data, and workflow decisions u
 - New products seeded by default should be salary-earner relevant and marked with realistic verification status.
 - Use product `status` and `mortgage_type` to keep non-core models out of default buyer flows.
 - Keep language precise: educational qualification guidance, not loan approval claims.
-- Buyer journey is entirely **pre-disbursement**: **Qualify → Get ready → Fund & settle (when built) → Submit**. There is no post-loan servicing phase in HomeGauge.
-- Show known processing costs from product fees as display-only obligations; do not collect client money until a licensed PSP/bank partner is integrated. Any Paystack/payments work is for pre-disbursement costs only (valuation, legal, equity milestones, etc.) — not monthly mortgage repayment.
+- Buyer journey is entirely **pre-disbursement**: **Qualify → Get ready → Fund & settle → Submit**. There is no post-loan servicing phase in HomeGauge.
+- Fund & settle uses Paystack Dedicated Virtual Accounts for case fee collection (valuation/legal/processing). Never use it for monthly mortgage repayment.
+- Show known processing costs from product fees; sync obligations when a product is chosen.
 - If a requested change conflicts with this focus, call it out and ask for explicit override.

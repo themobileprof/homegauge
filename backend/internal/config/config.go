@@ -37,6 +37,9 @@ type Config struct {
 	SalaryVariancePct    float64
 	SalaryPaydayLastDays int
 	DefaultITIPct        float64
+	PaystackSecretKey    string
+	PaystackPublicKey    string
+	PaystackDVABank      string
 }
 
 func Load() (Config, error) {
@@ -71,6 +74,9 @@ func Load() (Config, error) {
 		SalaryVariancePct:    floatEnv("SALARY_VARIANCE_PCT", 15),
 		SalaryPaydayLastDays: intEnv("SALARY_PAYDAY_LAST_DAYS", 7),
 		DefaultITIPct:        floatEnv("DEFAULT_ITI_PCT", 35),
+		PaystackSecretKey:    os.Getenv("PAYSTACK_SECRET_KEY"),
+		PaystackPublicKey:    os.Getenv("PAYSTACK_PUBLIC_KEY"),
+		PaystackDVABank:      getenv("PAYSTACK_DVA_BANK", "wema-bank"),
 	}
 	return cfg, nil
 }

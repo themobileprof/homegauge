@@ -1,7 +1,7 @@
 /**
  * Pre-disbursement journey for salaried first-time homebuyers.
  * HomeGauge ends at lender-ready / submitted — not post-loan servicing.
- * Fund & settle (when built) is also pre-disbursement: fees, equity, searches.
+ * Fund & settle collects pre-disbursement fees via Paystack DVA.
  */
 
 export const JOURNEY_PHASES = [
@@ -18,8 +18,7 @@ export const JOURNEY_PHASES = [
   {
     id: "fund_settle",
     title: "Fund & settle",
-    summary: "Pay valuation, legal, and other pre-disbursement costs (coming soon).",
-    locked: true,
+    summary: "Pay valuation, legal, and other pre-disbursement costs.",
   },
   {
     id: "submit",
@@ -38,6 +37,8 @@ export type JourneyInput = {
   acceptedRequiredDocs: number;
   sentBackDocs: number;
   caseStatus?: string | null;
+  fundingSettled?: boolean;
+  fundingEnabled?: boolean;
 };
 
 export type JourneyPhaseState = {
@@ -60,38 +61,40 @@ export function deriveJourney(input: JourneyInput): {
 
   const qualifyDone = input.assessmentCompleted && (input.hasLikelyProduct || Boolean(input.preferredProductId));
   const readyDone = qualifyDone && docsReady && Boolean(input.preferredProductId);
+  const fundingUnlocked = Boolean(input.preferredProductId);
+  const fundingDone = Boolean(input.fundingSettled);
 
   const status = input.caseStatus || "";
   const submitDone = ["SUBMITTED_TO_LENDER", "LENDER_REVIEW", "APPROVED", "REJECTED", "COMPLETED"].includes(status);
 
-  // Fund & settle sits between get_ready and submit once payments ship;
-  // until then, progress jumps get_ready → submit while that phase stays locked.
   let currentId: JourneyPhaseId = "qualify";
-  if (submitDone || readyDone || status === "READY_FOR_SUBMISSION") currentId = "submit";
+  if (submitDone || status === "READY_FOR_SUBMISSION") currentId = "submit";
+  else if (readyDone && fundingUnlocked && !fundingDone) currentId = "fund_settle";
+  else if (readyDone && (fundingDone || !fundingUnlocked)) currentId = "submit";
   else if (qualifyDone) currentId = "get_ready";
   else currentId = "qualify";
 
   const phases: JourneyPhaseState[] = JOURNEY_PHASES.map((p) => {
-    const locked = "locked" in p && p.locked === true;
-    if (locked) {
-      return { id: p.id, title: p.title, summary: p.summary, locked: true, state: "locked" };
-    }
     if (p.id === "qualify") {
-      return { id: p.id, title: p.title, summary: p.summary, state: qualifyDone ? "done" : currentId === "qualify" ? "current" : "upcoming" };
+      return { ...p, state: qualifyDone ? "done" : currentId === "qualify" ? "current" : "upcoming" };
     }
     if (p.id === "get_ready") {
       return {
-        id: p.id,
-        title: p.title,
-        summary: p.summary,
-        state: readyDone || submitDone ? "done" : currentId === "get_ready" ? "current" : "upcoming",
+        ...p,
+        state: readyDone || submitDone || currentId === "fund_settle" || currentId === "submit" ? "done" : currentId === "get_ready" ? "current" : "upcoming",
       };
     }
-    // submit — last active pre-disbursement phase
+    if (p.id === "fund_settle") {
+      if (!fundingUnlocked) {
+        return { ...p, locked: true, state: "locked" };
+      }
+      return {
+        ...p,
+        state: fundingDone || submitDone ? "done" : currentId === "fund_settle" ? "current" : "upcoming",
+      };
+    }
     return {
-      id: p.id,
-      title: p.title,
-      summary: p.summary,
+      ...p,
       state: submitDone ? "done" : currentId === "submit" ? "current" : "upcoming",
     };
   });
@@ -106,7 +109,9 @@ export function deriveJourney(input: JourneyInput): {
   } else if (currentId === "get_ready" && input.acceptedRequiredDocs < input.requiredDocs) {
     nextHint = "Upload remaining required documents for this product.";
   } else if (currentId === "get_ready") {
-    nextHint = "Confirm product, equity readiness, and known pre-disbursement costs with your advisor.";
+    nextHint = "Confirm product, equity readiness, and documents with your advisor.";
+  } else if (currentId === "fund_settle") {
+    nextHint = "Open your case collection account and fund outstanding pre-disbursement fees.";
   } else if (currentId === "submit" && status === "READY_FOR_SUBMISSION") {
     nextHint = "Your file is ready — admin will release it to a lender for underwriting.";
   } else if (currentId === "submit" && !submitDone) {
@@ -126,7 +131,7 @@ export type ReadinessCost = {
   when: "before_approval" | "at_offer" | "before_disbursement";
 };
 
-/** Build display-only pre-disbursement cost list from product fees (no payments yet). */
+/** Build display-only pre-disbursement cost list from product fees (fallback when funding API not loaded). */
 export function readinessCostsFromProduct(p: {
   processing_fee?: number | null;
   valuation_fee?: number | null;
@@ -189,3 +194,38 @@ export function readinessCostsFromProduct(p: {
   });
   return items;
 }
+
+export type FundingSnapshot = {
+  enabled: boolean;
+  paystack_public_key?: string;
+  account: {
+    account_number: string;
+    account_name: string;
+    bank_name: string;
+    bank_slug: string;
+    currency_code: string;
+    status: string;
+  } | null;
+  obligations: {
+    id: string;
+    obligation_key: string;
+    label: string;
+    amount: number | null;
+    amount_received: number;
+    due_phase: string;
+    collectable: boolean;
+    status: string;
+    note: string;
+  }[];
+  movements: {
+    id: string;
+    amount: number;
+    paystack_reference: string;
+    created_at: string;
+  }[];
+  total_due: number;
+  total_received: number;
+  total_outstanding: number;
+  all_settled: boolean;
+  preferred_product_name?: string;
+};
